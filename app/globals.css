@@ -1,26 +1,6 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+:root{--background:#F5EDE0;--foreground:#5D2E1F;--primary:#B45309;--primary-foreground:#FFF8F0;--secondary:#EADCC8;--secondary-foreground:#5D2E1F;--muted:#F0E6D2;--muted-foreground:#7A4A2F;--card:#FFF8F0;--card-foreground:#5D2E1F;--popover:#FFF8F0;--popover-foreground:#5D2E1F;--border:#D4BFA6;--input:#D4BFA6;--ring:#B45309;--radius:0.75rem;--font-display:"Cormorant Garamond",Georgia,serif;--font-sans:"Karla",system-ui,sans-serif;}
+.dark{--background:#2A1810;--foreground:#FCEEDB;--primary:#D97706;--primary-foreground:#2A1810;--secondary:#4A3428;--secondary-foreground:#FCEEDB;--card:#3D2418;--card-foreground:#FCEEDB;--muted:#4A3428;--muted-foreground:#CBAA8F;--border:#5C3D2E;--input:#5C3D2E;--ring:#D97706;}
+@theme inline{--color-background:var(--background);--color-foreground:var(--foreground);--color-card:var(--card);--color-card-foreground:var(--card-foreground);--color-popover:var(--popover);--color-popover-foreground:var(--popover-foreground);--color-primary:var(--primary);--color-primary-foreground:var(--primary-foreground);--color-secondary:var(--secondary);--color-secondary-foreground:var(--secondary-foreground);--color-muted:var(--muted);--color-muted-foreground:var(--muted-foreground);--color-accent:#B45309;--color-accent-foreground:#FFF8F0;--color-destructive:#8B3A3A;--color-destructive-foreground:#FFF8F0;--color-border:var(--border);--color-input:var(--input);--color-ring:var(--ring);--font-display:var(--font-display);--font-sans:var(--font-sans);--radius-sm:calc(var(--radius)-4px);--radius-md:calc(var(--radius)-2px);--radius-lg:var(--radius);--radius-xl:calc(var(--radius)+4px);--radius-2xl:calc(var(--radius)+8px);--radius-3xl:calc(var(--radius)+12px);}
+@layer base{*{border-color:var(--color-border)} body{background-color:var(--color-background);color:var(--color-foreground);font-family:var(--font-sans)} ::selection{background-color:var(--color-primary);color:var(--color-primary-foreground)}}
+@utility paper-grain{background-image:radial-gradient(oklch(0.55 0.135 38/4%) 1px,transparent 1px);background-size:22px 22px}
