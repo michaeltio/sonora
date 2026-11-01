@@ -2,6 +2,29 @@
 
 import { z } from "zod";
 
+export interface BgmAlternative {
+  trackId: string;
+  url: string;
+  label: string;
+  score: number;
+}
+
+export interface BgmMatchInfo {
+  trackId: string;
+  url: string;
+  label: string;
+  score: number;
+  reason: string;
+  alternatives: BgmAlternative[];
+  atmosphere: {
+    vector: number[];
+    labels: Record<string, number>;
+    category: string;
+    cultureCues: string[];
+    mood: string;
+  };
+}
+
 export interface NarrationResult {
   title: string;
   kind: string;
@@ -9,6 +32,7 @@ export interface NarrationResult {
   narration: string;
   source?: "muse" | "mock";
   note?: string | null;
+  music?: BgmMatchInfo | null;
 }
 
 const InputSchema = z.object({ image: z.string().min(1).max(10_000_000), mode: z.enum(["mock", "ai"]).default("mock") });

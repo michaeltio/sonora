@@ -1,46 +1,101 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { selectBgmForArtwork } from "@/lib/select-bgm";
 
-const Schema = z.object({ mode: z.enum(["mock", "ai"]).default("mock"), image: z.string().min(1).max(10_000_000) });
+const Schema = z.object({
+  mode: z.enum(["mock", "ai"]).default("mock"),
+  image: z.string().startsWith("data:image/").max(10_000_000),
+});
 
 const MOCK_RESULT = {
   title: "Penangkapan Pangeran Diponegoro",
   kind: "Indonesian historical painting",
   origin: "Java 19th-c",
   narration:
-    "Anda sedang melihat karya Raden Saleh, Penangkapan Pangeran Diponegoro. Di tengah adegan, Diponegoro berdiri dengan jubah putih, sementara para pejabat kolonial mengelilinginya. Warna biru gelap, krem hangat, dan merah bata membangun suasana yang khidmat, tegang, dan penuh keberanian. Perhatikan bagaimana posisi tokoh-tokohnya membentuk percakapan visual tentang kekuasaan dan perlawanan.",
+    "Anda sedang melihat karya Raden Saleh berjudul Penangkapan Pangeran Diponegoro, sebuah lukisan penting dalam sejarah seni Indonesia. Di bagian tengah, Pangeran Diponegoro berdiri tegak dengan jubah putih, wajahnya menunjukkan keteguhan sekaligus kelelahan setelah menghadapi kekuasaan kolonial. Di sekelilingnya, para pejabat Belanda dan pengikutnya membentuk kerumunan yang terasa rapat dan menekan. Perhatikan sosok Jenderal De Kock yang duduk, berlawanan dengan posisi Diponegoro yang berdiri. Kontras ini menggambarkan perbedaan kuasa dan martabat. Warna biru gelap menciptakan suasana berat, sedangkan krem hangat memberi cahaya pada tokoh utama. Merah bata dan cokelat tanah menambah kesan tegang, historis, dan membumi. Raden Saleh tidak hanya melukiskan sebuah peristiwa, tetapi juga menyampaikan kritik tentang penangkapan, perlawanan, dan harga diri. Luangkan waktu untuk mengamati tatapan setiap tokoh, karena di sanalah konflik terasa paling kuat dan suasana politik yang membentuk Indonesia modern pada masa itu.",
   source: "mock" as const,
   note: "Mock mode — tidak memanggil Muse API.",
 };
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const parsed = Schema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ ok: false, error: "Input gambar tidak valid." }, { status: 400 });
+    const parsed = Schema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, error: "Input gambar tidak valid atau terlalu besar." }, { status: 400 });
+    }
+    if (parsed.data.mode === "mock") {
+      const music = selectBgmForArtwork({
+        title: MOCK_RESULT.title,
+        origin: MOCK_RESULT.origin,
+        kind: MOCK_RESULT.kind,
+        narration: MOCK_RESULT.narration,
+        mood: "solemn, tense, historical",
+      });
+      return NextResponse.json({
+        ok: true,
+        ...MOCK_RESULT,
+        music: {
+          trackId: music.track.id,
+          url: music.track.url,
+          label: music.track.label,
+          score: music.score,
+          reason: music.reason,
+          alternatives: music.alternatives.map((a) => ({ trackId: a.track.id, url: a.track.url, label: a.track.label, score: a.score })),
+          atmosphere: music.atmosphere,
+        },
+      });
+    }
 
-    if (parsed.data.mode === "mock") return NextResponse.json({ ok: true, ...MOCK_RESULT });
-
-    const apiKey = process.env.MUSE_API_KEY || process.env.FIREWORKS_API_KEY || process.env.BASETEN_API_KEY;
-    const apiUrl = process.env.MUSE_API_URL || process.env.FIREWORKS_API_URL || "";
-    if (!apiKey || !apiUrl) return NextResponse.json({ ok: false, error: "MUSE_API_KEY dan MUSE_API_URL belum dikonfigurasi." }, { status: 503 });
-
-    const response = await fetch(apiUrl.startsWith("http") ? apiUrl : `https://${apiUrl}`, {
+    // Reuse the existing, provider-compatible Muse vision route. It supports
+    // both OpenAI chat-completions and Responses-style providers.
+    const describeResponse = await fetch(new URL("/api/describe", request.url), {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: process.env.MUSE_MODEL || "muse-wonder-1.0",
-        messages: [{ role: "user", content: [{ type: "text", text: "Describe this Indonesian artwork. Return JSON with title, kind, origin, narration." }, { type: "image_url", image_url: { url: parsed.data.image } }] }],
-        temperature: 0.3,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: parsed.data.image }),
+      cache: "no-store",
     });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) return NextResponse.json({ ok: false, error: data?.error?.message || `Muse API ${response.status}` }, { status: 502 });
-    const text = data?.choices?.[0]?.message?.content || data?.output_text || "";
-    const match = text.match(/\{[\s\S]*\}/);
-    const json = match ? JSON.parse(match[0]) : null;
-    if (!json) return NextResponse.json({ ok: false, error: "Muse tidak mengembalikan JSON yang valid." }, { status: 502 });
-    return NextResponse.json({ ok: true, title: json.title || "Unknown artwork", kind: json.kind || "Indonesian artwork", origin: json.origin || "Indonesia", narration: json.narration || "", source: "muse" });
+    const data = await describeResponse.json().catch(() => null);
+    if (!describeResponse.ok) {
+      return NextResponse.json({ ok: false, error: data?.error || "Muse vision gagal.", details: data?.details }, { status: describeResponse.status });
+    }
+
+    const vision = data?.json;
+    const narration: string = data?.audioScript?.plain || data?.caption || "";
+    const music = selectBgmForArtwork({
+      title: vision?.title,
+      artist: vision?.artist,
+      origin: vision?.origin,
+      period: vision?.period,
+      mood: vision?.mood,
+      composition: vision?.composition,
+      objects: vision?.objects,
+      symbolic_elements: vision?.symbolic_elements,
+      narration,
+      kind: data?.json?.period,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      title: vision?.title || "Unknown artwork",
+      kind: vision?.period || "Indonesian artwork",
+      origin: vision?.origin || "Indonesia",
+      narration,
+      source: "muse",
+      vision,
+      music: {
+        trackId: music.track.id,
+        url: music.track.url,
+        label: music.track.label,
+        score: music.score,
+        reason: music.reason,
+        alternatives: music.alternatives.map((a) => ({ trackId: a.track.id, url: a.track.url, label: a.track.label, score: a.score })),
+        atmosphere: music.atmosphere,
+      },
+      audioScript: data?.audioScript,
+      colorsDescribed: data?.colorsDescribed,
+      tabletZones: data?.tabletZones,
+      cues: data?.cues,
+    });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Request gagal." }, { status: 400 });
   }

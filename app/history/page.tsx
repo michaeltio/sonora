@@ -1,1 +1,0 @@
-import type { Metadata } from "next"; import HistoryPageClient from "@/app/components/HistoryPage"; export const metadata: Metadata = { title: "History — Sonora", description: "Replay stories." }; export default function HistoryPage() { return <HistoryPageClient />; }

@@ -51,8 +51,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" className="rounded-xl px-4 py-2 text-sm font-semibold text-[#5D2E1F] transition hover:bg-[#EADCC8]" aria-label="Scan artwork">
                 Scan
               </Link>
-              <Link href="/history" className="rounded-xl bg-[#B45309] px-4 py-2 text-sm font-semibold text-[#FFF8F0] shadow-sm transition hover:bg-[#8F4008]" aria-label="View scan history">
-                History
+              <Link href="/examples" className="rounded-xl bg-[#B45309] px-4 py-2 text-sm font-semibold text-[#FFF8F0] shadow-sm transition hover:bg-[#8F4008]" aria-label="View examples">
+                Examples
               </Link>
             </div>
           </nav>

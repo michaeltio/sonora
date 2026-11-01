@@ -25,88 +25,75 @@ export async function POST(req: NextRequest) {
   }
 
   const { text, language } = parsed.data;
-  const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
-  const hfModel = process.env.HF_MODEL || "coqui/XTTS-v2";
 
-  if (!hfToken) {
-    return NextResponse.json(
-      {
-        error: "HF_TOKEN belum di-set",
-        details: "Isi HF_TOKEN=hf_... di .env.local lalu restart dev server",
-        hint: "Buat token di huggingface.co/settings/tokens dengan scope Inference/Read",
-      },
-      { status: 500 }
-    );
-  }
-
-  // Hugging Face Inference API
-  const hfUrl = `https://api-inference.huggingface.co/models/${hfModel}`;
-
-  try {
-    const hfRes = await fetch(hfUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${hfToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: text,
-        parameters: {
+  // 1) Custom XTTS server (Colab tunnel, raw WAV response).
+  //    Set XTTS_URL to the /generate-audio/ endpoint and XTTS_SPEAKER_WAV
+  //    to a reference file path that exists on that server.
+  const xttsUrl = process.env.XTTS_URL;
+  if (xttsUrl) {
+    try {
+      const r = await fetch(xttsUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
           language,
-        },
-      }),
-    });
-
-    if (!hfRes.ok) {
-      const t = await hfRes.text();
-      // HF returns JSON error or binary error
-      return NextResponse.json(
-        {
-          error: "Hugging Face inference gagal",
-          details: `HF ${hfRes.status}: ${t.slice(0, 800)}`,
-          hint: "Cek HF_TOKEN, model coqui/XTTS-v2 mungkin butuh speaker_wav. Untuk fairy-tale voice, host di Modal lebih stabil.",
-        },
-        { status: 502 }
-      );
+          speaker_wav: process.env.XTTS_SPEAKER_WAV || "speaker.wav",
+        }),
+      });
+      if (r.ok) {
+        const contentType = r.headers.get("content-type") || "";
+        if (contentType.includes("audio") || contentType.includes("octet-stream")) {
+          const buf = Buffer.from(await r.arrayBuffer());
+          if (buf.length > 1000) {
+            return NextResponse.json({
+              source: "xtts-custom",
+              audio: `data:audio/wav;base64,${buf.toString("base64")}`,
+              mime: "audio/wav",
+            });
+          }
+        } else {
+          const data = await r.json().catch(() => null);
+          if (data?.audio) {
+            return NextResponse.json({ source: "xtts-custom", audio: data.audio, mime: "audio/mpeg" });
+          }
+        }
+      } else {
+        const errText = await r.text().catch(() => "");
+        console.warn("[tts] XTTS failed:", r.status, errText.slice(0, 300));
+      }
+    } catch (e) {
+      console.warn("[tts] XTTS error:", e instanceof Error ? e.message : String(e));
     }
-
-    const contentType = hfRes.headers.get("content-type") || "";
-
-    // HF can return audio/wav or audio/mpeg or JSON with audio
-    if (contentType.includes("audio") || contentType.includes("octet-stream")) {
-      const buf = Buffer.from(await hfRes.arrayBuffer());
-      const base64 = buf.toString("base64");
-      const mime = contentType.split(";")[0] || "audio/wav";
-      const dataUrl = `data:${mime};base64,${base64}`;
-      return NextResponse.json({ source: "huggingface", model: hfModel, audio: dataUrl, mime });
-    }
-
-    // If HF returns JSON with base64
-    const data = await hfRes.json().catch(() => null);
-    if (data && typeof data.audio === "string") {
-      return NextResponse.json({ source: "huggingface", model: hfModel, audio: data.audio });
-    }
-
-    return NextResponse.json(
-      { error: "Format audio dari HF tidak dikenali", details: JSON.stringify(data).slice(0, 600) },
-      { status: 502 }
-    );
-  } catch (e: any) {
-    const msg = e.message ?? String(e);
-    // Sandbox DNS block for api-inference.huggingface.co -> give dev fallback so UI still testable
-    const isDnsBlock = msg.includes("Could not resolve host") || msg.includes("fetch failed") || msg.includes("ENOTFOUND");
-    if (isDnsBlock) {
-      // Return mock audio strategy: tell frontend to use browser Web Speech as fallback, but also give mock wav header
-      return NextResponse.json(
-        {
-          error: "Gagal menghubungi Hugging Face (sandbox block)",
-          details: msg,
-          hint: "STRATEGI: 1) Untuk dev, pakai tombol Generate audio sekarang akan fallback ke browser TTS sementara. 2) Untuk XTTS asli, host di Modal dan set MODAL_TTS_URL di .env.local. Lihat /tmp note di server.",
-          fallback: true,
-        },
-        { status: 502 }
-      );
-    }
-    return NextResponse.json({ error: "Gagal menghubungi Hugging Face", details: msg }, { status: 502 });
   }
+
+  // 2) Persistent hosted TTS (/speak endpoint). Set TTS_URL to the endpoint.
+  //    Optional shared secret via TTS_KEY (sent as x-sonora-key).
+  const ttsUrl = process.env.TTS_URL;
+  if (ttsUrl) {
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (process.env.TTS_KEY) headers["x-sonora-key"] = process.env.TTS_KEY;
+      const r = await fetch(ttsUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ text, language }),
+      });
+      const data = await r.json().catch(() => null);
+      if (r.ok && data?.audio) {
+        return NextResponse.json({ source: "hosted-tts", audio: data.audio, mime: "audio/mpeg" });
+      }
+      console.warn("[tts] hosted TTS failed:", r.status, JSON.stringify(data)?.slice(0, 300));
+    } catch (e) {
+      console.warn("[tts] hosted TTS error:", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return NextResponse.json(
+    {
+      error: "Tidak ada TTS endpoint yang aktif",
+      details: "Set XTTS_URL (server XTTS Colab) atau TTS_URL (hosted /speak endpoint) di environment.",
+    },
+    { status: 503 }
+  );
 }

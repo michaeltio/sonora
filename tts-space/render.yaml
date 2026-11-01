@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: sonora-tts
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SONORA_TTS_KEY
+        generateValue: true
