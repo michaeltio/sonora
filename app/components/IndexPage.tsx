@@ -1,26 +1,26 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, ImagePlus, Loader2, Play, Plus, ScanLine, Sparkles, Square, X } from "lucide-react";
+import { Camera, ImagePlus, Loader2, Play, Plus, ScanLine, Sparkles, Square, Volume2, X } from "lucide-react";
 import type { NarrationResult } from "@/lib/art.server";
 import { makeThumbnail, prepareImage, saveHistoryEntry } from "@/lib/art-history";
+import { compressAudioForStorage } from "@/lib/audio-compress";
 import { saveUserExample } from "@/lib/user-examples";
 import { useMixedPlayer } from "@/lib/use-mixed-player";
-
-const isProduction = process.env.NODE_ENV === "production";
+import { isProduction } from "@/lib/app-env";
 type Stage = "capture" | "ready" | "analyzing" | "done";
 
 export default function IndexPage() {
   const mix = useMixedPlayer();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
-  const [mode, setMode] = useState<"mock" | "ai">("mock");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [stage, setStage] = useState<Stage>("capture");
   const [image, setImage] = useState<string | null>(null);
   const [result, setResult] = useState<NarrationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedToExamples, setSavedToExamples] = useState(false);
+  const [savingExample, setSavingExample] = useState(false);
 
   async function handleFile(file: File | undefined | null) {
     if (!file) return;
@@ -47,14 +47,10 @@ export default function IndexPage() {
     if (!image) return;
     setStage("analyzing"); setError(null); mix.stop();
     try {
-      let response: any;
-      if (mode === "mock") {
-        response = { ok: true, title: "Penangkapan Pangeran Diponegoro", kind: "Indonesian historical painting", origin: "Java 19th-c", narration: "Anda sedang melihat karya Raden Saleh berjudul Penangkapan Pangeran Diponegoro, sebuah lukisan penting dalam sejarah seni Indonesia. Di bagian tengah, Pangeran Diponegoro berdiri tegak dengan jubah putih, wajahnya menunjukkan keteguhan sekaligus kelelahan setelah menghadapi kekuasaan kolonial. Di sekelilingnya, para pejabat Belanda dan pengikutnya membentuk kerumunan yang terasa rapat dan menekan. Perhatikan sosok Jenderal De Kock yang duduk, berlawanan dengan posisi Diponegoro yang berdiri. Kontras ini menggambarkan perbedaan kuasa dan martabat. Warna biru gelap menciptakan suasana berat, sedangkan krem hangat memberi cahaya pada tokoh utama. Merah bata dan cokelat tanah menambah kesan tegang, historis, dan membumi. Raden Saleh tidak hanya melukiskan sebuah peristiwa, tetapi juga menyampaikan kritik tentang penangkapan, perlawanan, dan harga diri. Luangkan waktu untuk mengamati tatapan setiap tokoh, dan suasana politik yang membentuk Indonesia modern pada masa itu.", source: "mock" };
-      } else {
-        const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image, mode: "ai" }) });
-        response = await res.json().catch(() => ({ ok: false, error: "Respons AI tidak valid." }));
-        if (!res.ok) response.ok = false;
-      }
+      // Full AI: selalu lewat Muse vision + KB + narasi berfakta. Tanpa mock.
+      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image }) });
+      const response = await res.json().catch(() => ({ ok: false, error: "Invalid AI response." }));
+      if (!res.ok) response.ok = false;
       if (!response.ok) { setError(response.error || "Generation failed"); setStage("ready"); return; }
       const r = response as NarrationResult;
       setResult(r); setStage("done");
@@ -69,9 +65,13 @@ export default function IndexPage() {
   }
 
   async function handleAddToExamples() {
-    if (!result) return;
+    if (!result || savingExample) return;
+    setSavingExample(true);
     try {
-      const thumbnail = image ? await makeThumbnail(image).catch(() => image || "") : "";
+      const thumbnail = image ? await makeThumbnail(image).catch(() => "") : "";
+      // Kompres audio dulu (mono, sample rate rendah) supaya muat di localStorage.
+      // Kualitas turun tidak masalah; kalau tetap tidak muat -> null (Play generate on-demand).
+      const ttsAudio = mix.ttsUrl ? await compressAudioForStorage(mix.ttsUrl).catch(() => null) : null;
       saveUserExample({
         id: crypto.randomUUID(),
         title: result.title || "Unknown",
@@ -79,27 +79,27 @@ export default function IndexPage() {
         origin: result.origin || "Unknown",
         narration: result.narration || "",
         thumbnail,
-        audioDataUrl: mix.ttsUrl,
+        audioDataUrl: ttsAudio,
         musicLabel: result.music?.label,
         createdAt: Date.now(),
       });
       setSavedToExamples(true);
     } catch {
       setSavedToExamples(false);
+    } finally {
+      setSavingExample(false);
     }
   }
 
-  const canMix = !!mix.ttsUrl && !!mix.musicUrl;
+  const canMix = !!mix.musicUrl && (!!mix.ttsUrl || mix.ttsSource === "browser");
   const isPlaying = mix.state === "playing";
   const isBusy = mix.state === "loading-tts" || mix.state === "loading-music" || mix.state === "exporting";
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-10 sm:px-6">
-      {isProduction && <div className="mx-auto mb-5 w-fit rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">Production</div>}
-      {stage !== "done" && <section className="text-center"><h1 className="font-display text-4xl font-semibold sm:text-5xl">Scan a work of art,<br /><span className="italic text-primary">hear its story.</span></h1><p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground">Foto karya seni Indonesia → narasi + musik gamelan bercampur jadi satu audio.</p></section>}
+      {stage !== "done" && <section className="text-center"><h1 className="font-display text-4xl font-semibold sm:text-5xl">Your personal<br /><span className="italic text-primary">museum guide.</span></h1></section>}
 
       {stage === "capture" && <section className="mx-auto mt-10 max-w-5xl text-center">
-        {!isProduction && <div className="mb-5 rounded-2xl border border-border bg-card p-4 text-left shadow-sm"><p className="text-sm font-semibold">Developer generation mode</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => setMode("mock")} className={`rounded-xl px-3 py-2 text-sm font-semibold ${mode === "mock" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>Mock — UI test</button><button type="button" onClick={() => setMode("ai")} className={`rounded-xl px-3 py-2 text-sm font-semibold ${mode === "ai" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>AI — Muse API</button></div><p className="mt-2 text-xs text-muted-foreground">Mock tidak memanggil API. Pilih AI untuk menguji Muse.</p></div>}
         <button type="button" onClick={() => setPickerOpen(true)} className="group mx-auto flex w-full flex-col items-center gap-4 rounded-3xl border-2 border-dashed border-[#B45309]/45 bg-[#EADCC8] px-6 py-14 text-center shadow-[0_8px_24px_rgba(93,46,31,0.08)] transition hover:border-[#B45309] hover:bg-[#E4D0B5] hover:shadow-lg"><span className="flex size-20 items-center justify-center rounded-2xl border-2 border-[#D4BFA6] bg-[#FFF8F0] text-[#B45309] shadow-[0_4px_12px_rgba(93,46,31,0.10)] transition group-hover:-translate-y-1 group-hover:border-[#B45309] group-hover:bg-[#EADCC8]"><svg aria-hidden="true" viewBox="0 0 24 24" className="size-10" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg></span><span className="font-display text-3xl font-semibold">Upload an artwork</span><span className="text-sm text-muted-foreground">Choose camera or gallery from the next step</span></button>
         <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} /><input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
       </section>}
@@ -123,8 +123,15 @@ export default function IndexPage() {
               {isBusy ? <><Loader2 className="size-5 animate-spin" />Preparing audio…</> : isPlaying ? <><Square className="size-5" />Stop</> : <><Play className="size-5" />Play narration</>}
             </button>
             {mix.error && <p className="rounded-lg bg-destructive/10 px-4 py-2.5 text-center text-sm font-medium text-destructive">{mix.error}</p>}
+        {mix.ttsSource === "browser" && (
+          <p className="flex items-center justify-center gap-1.5 rounded-lg bg-secondary/60 px-4 py-2 text-center text-xs font-medium text-muted-foreground">
+            <Volume2 className="size-4" /> Using on-device English voice — TTS server unreachable
+          </p>
+        )}
 
-            <button type="button" onClick={handleAddToExamples} disabled={savedToExamples} className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-6 py-3.5 font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-60"><Plus className="size-5" />{savedToExamples ? "Saved to Examples ✓" : "Add to Examples"}</button>
+            {!isProduction && (
+              <button type="button" onClick={handleAddToExamples} disabled={savedToExamples || savingExample} className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-6 py-3.5 font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-60"><Plus className="size-5" />{savedToExamples ? "Saved to Examples ✓" : savingExample ? "Compressing audio…" : "Add to Examples"}</button>
+            )}
             <button type="button" onClick={reset} className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-6 py-3.5 font-semibold text-primary transition hover:bg-primary/10"><ScanLine className="size-5" />Scan another artwork</button>
           </div>
         </article>

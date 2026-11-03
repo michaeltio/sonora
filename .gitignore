@@ -39,3 +39,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tts-server local runtime
+tts-server/.venv
+tts-server/.py
+tts-server/.deps
+tts-server/.tmp
+tts-server/.bootstrap
+tts-server/*.wav
+tts-server/__pycache__/
+tts-server/server.log
+
+# bun temp
+.tmp-bun/
+
+# local test upload images (prod uses upload callback instead)
+example_*

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = Schema.safeParse(body ?? {});
   if (!parsed.success) {
-    return NextResponse.json({ error: "Input tidak valid", details: parsed.error.issues }, { status: 400 });
+    return NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 });
   }
   const { prompt, duration } = parsed.data;
 
@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
     procedural: true,
     prompt,
     duration,
-    hint: "Gunakan synthesizer gamelan lokal (Web Audio). Tidak perlu API key.",
+    hint: "Uses the local gamelan synthesizer (Web Audio). No API key needed.",
     presets: [
-      { id: "gamelan-calm", label: "Gamelan Calm — slendro lembut", prompt: "gamelan slendro, suling, gong sparse" },
+      { id: "gamelan-calm", label: "Gamelan Calm — gentle slendro", prompt: "gamelan slendro, suling, gong sparse" },
       { id: "gamelan-meditative", label: "Meditative — bonang + gong", prompt: "meditative bonang, gong ageng, slow" },
       { id: "ambient-warm", label: "Ambient Warm — pad + suling", prompt: "warm ambient pad, suling flute" },
     ],

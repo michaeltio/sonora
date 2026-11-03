@@ -1,0 +1,12 @@
+# Install torch yang sesuai dulu dari https://pytorch.org/get-started/locally/
+# (CPU atau CUDA), baru install file ini:
+#   pip install -r requirements.txt
+fastapi
+uvicorn[standard]
+pydantic
+coqui-tts
+# transformers v5 butuh torch>=2.6; torch cu121 (2.5.x) harus pakai v4
+"transformers>=4.33,<5"
+six
+librosa
+soundfile

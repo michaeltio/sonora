@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, FileText, Image as ImageIcon, Loader2, Music2, Pause, Play, Trash2 } from "lucide-react";
-import { EXAMPLES, type ExampleEntry } from "@/lib/examples";
+import { Eye, Loader2, Pause, Play, Trash2, X } from "lucide-react";
+import { EXAMPLES } from "@/lib/examples";
 import { deleteUserExample, loadUserExamples, type UserExample } from "@/lib/user-examples";
+import { isProduction } from "@/lib/app-env";
 
 type Card = {
   key: string;
@@ -17,23 +18,24 @@ type Card = {
   musicLabel?: string;
 };
 
-function downloadText(title: string, kind: string, origin: string, narration: string, id: string) {
-  const blob = new Blob([`${title}\n${kind} · ${origin}\n\n${narration}\n`], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${id}-narration.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
+/** First few words of the narration for the card face. Full text lives in the drawer. */
+function excerpt(text: string, words = 16): string {
+  const parts = text.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= words) return text.trim();
+  return parts.slice(0, words).join(" ") + "…";
 }
 
 export default function ExamplesPageClient() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const [userExamples, setUserExamples] = useState<UserExample[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [voiceFallback, setVoiceFallback] = useState<Record<string, boolean>>({});
+  const [drawerCard, setDrawerCard] = useState<Card | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // "generated" = audio dibuat on-demand via /api/tts saat Play ditekan.
+  // "browser" = server TTS mati, pakai suara on-device.
+  const [audioNote, setAudioNote] = useState<Record<string, "generated" | "browser">>({});
 
   const cards: Card[] = [
     ...userExamples.map((e) => ({
@@ -72,6 +74,35 @@ export default function ExamplesPageClient() {
     };
   }, []);
 
+  // Lock body scroll + Escape to close while the drawer is open.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeDrawer();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerOpen]);
+
+  function openDrawer(card: Card) {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    setDrawerCard(card);
+    // Next frame so the slide-in transition actually animates.
+    requestAnimationFrame(() => requestAnimationFrame(() => setDrawerOpen(true)));
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => setDrawerCard(null), 320);
+  }
+
   function stopAll() {
     audioRef.current?.pause();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -92,32 +123,53 @@ export default function ExamplesPageClient() {
     window.speechSynthesis.speak(u);
   }
 
+  async function playGenerated(card: Card) {
+    // Audio tidak tersimpan (file terlalu besar untuk localStorage) —
+    // buat saat diputar via /api/tts. Butuh server TTS menyala.
+    setLoadingId(card.key);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: card.narration, language: "en" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.audio) throw new Error(data?.error || "TTS failed");
+      const audio = audioRef.current;
+      if (!audio) throw new Error("no audio element");
+      audio.src = data.audio as string;
+      await audio.play();
+      setPlayingId(card.key);
+      setLoadingId(null);
+      setAudioNote((m) => ({ ...m, [card.key]: "generated" }));
+    } catch {
+      setAudioNote((m) => ({ ...m, [card.key]: "browser" }));
+      speakWithBrowser(card.key, card.narration);
+    }
+  }
+
   async function handlePlay(card: Card) {
     if (playingId === card.key) {
       stopAll();
       return;
     }
     stopAll();
-    if (!card.audio) {
-      setVoiceFallback((m) => ({ ...m, [card.key]: true }));
-      speakWithBrowser(card.key, card.narration);
-      return;
-    }
+    // 1) Audio siap (file statis / klip kecil tersimpan) → langsung putar, tanpa request.
     const audio = audioRef.current;
-    if (!audio) {
-      speakWithBrowser(card.key, card.narration);
-      return;
+    if (card.audio && audio) {
+      setLoadingId(card.key);
+      audio.src = card.audio;
+      try {
+        await audio.play();
+        setPlayingId(card.key);
+        setLoadingId(null);
+        return;
+      } catch {
+        // file rusak/hilang → lanjut ke generate on-demand di bawah
+      }
     }
-    setLoadingId(card.key);
-    audio.src = card.audio;
-    try {
-      await audio.play();
-      setPlayingId(card.key);
-      setLoadingId(null);
-    } catch {
-      setVoiceFallback((m) => ({ ...m, [card.key]: true }));
-      speakWithBrowser(card.key, card.narration);
-    }
+    // 2) Tidak ada audio tersimpan → generate on-demand, fallback suara browser.
+    await playGenerated(card);
   }
 
   useEffect(() => {
@@ -126,8 +178,7 @@ export default function ExamplesPageClient() {
     const onError = () => {
       if (loadingId) {
         const card = cards.find((c) => c.key === loadingId);
-        setVoiceFallback((m) => ({ ...m, [loadingId]: true }));
-        if (card) speakWithBrowser(card.key, card.narration);
+        if (card) playGenerated(card);
         else {
           setPlayingId(null);
           setLoadingId(null);
@@ -141,18 +192,40 @@ export default function ExamplesPageClient() {
 
   function handleDelete(userId: string) {
     if (playingId === `user-${userId}`) stopAll();
+    if (drawerCard?.userId === userId) closeDrawer();
     setUserExamples(deleteUserExample(userId));
+  }
+
+  function renderPlayButton(card: Card, big = false) {
+    const isPlaying = playingId === card.key;
+    const isLoading = loadingId === card.key;
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handlePlay(card);
+        }}
+        disabled={isLoading}
+        className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 ${big ? "py-4 text-base" : "py-3 text-sm"} font-bold shadow-sm transition disabled:opacity-60 ${isPlaying ? "bg-foreground text-background" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
+      >
+        {isLoading ? (
+          <><Loader2 className="size-4 animate-spin" />Loading…</>
+        ) : isPlaying ? (
+          <><Pause className="size-4" />Stop</>
+        ) : (
+          <><Play className="size-4" />Play</>
+        )}
+      </button>
+    );
   }
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-10 sm:px-6">
       <section className="text-center">
         <h1 className="font-display text-4xl font-semibold sm:text-5xl">
-          Examples, <span className="italic text-primary">ready to play.</span>
+          Saved stories, <span className="italic text-primary">ready to replay.</span>
         </h1>
-        <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground">
-          Finished generations you saved. Press play — no upload, no AI request needed.
-        </p>
       </section>
 
       {cards.length === 0 ? (
@@ -163,76 +236,97 @@ export default function ExamplesPageClient() {
           </p>
         </section>
       ) : (
-        <section className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((card) => {
-            const isPlaying = playingId === card.key;
-            const isLoading = loadingId === card.key;
-            const isExpanded = expandedId === card.key;
-            return (
-              <article key={card.key} className="flex flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition hover:shadow-md">
-                <div className="relative flex min-h-[200px] items-center justify-center overflow-hidden bg-[#EADCC8]">
-                  {card.image ? (
-                    <img src={card.image} alt={card.title} className="block max-h-[260px] w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">No image</span>
-                  )}
-                  {card.userId && (
-                    <button type="button" onClick={() => handleDelete(card.userId!)} aria-label={`Remove ${card.title}`} className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-full bg-foreground/70 text-background transition hover:bg-foreground">
-                      <Trash2 className="size-4" />
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-1 flex-col gap-3 p-5">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{card.kind} · {card.origin}</p>
-                    <h2 className="mt-1 font-display text-2xl font-semibold italic leading-tight">{card.title}</h2>
-                    {card.musicLabel && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><Music2 className="size-3.5" />{card.musicLabel}</p>}
-                  </div>
-                  <p className={isExpanded ? "whitespace-pre-line text-sm leading-relaxed" : "line-clamp-3 whitespace-pre-line text-sm italic leading-relaxed text-muted-foreground"}>
-                    {card.narration}
-                  </p>
-                  <button type="button" onClick={() => setExpandedId(isExpanded ? null : card.key)} className="self-start text-xs font-semibold text-primary hover:underline">
-                    {isExpanded ? "Show less" : "Read full narration"}
+        <section className="mt-10 grid items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {cards.map((card) => (
+            <article
+              key={card.key}
+              role="button"
+              tabIndex={0}
+              aria-label={`View details of ${card.title}`}
+              onClick={() => openDrawer(card)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openDrawer(card);
+                }
+              }}
+              className="flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {/* Fixed 4:3 stage — artwork keeps its own aspect ratio via object-contain. */}
+              <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-[#EADCC8]">
+                {card.image ? (
+                  <img src={card.image} alt={card.title} className="block h-full w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                ) : (
+                  <span className="flex h-full items-center justify-center text-xs text-muted-foreground">No image</span>
+                )}
+                {!isProduction && card.userId && (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(card.userId!); }} aria-label={`Remove ${card.title}`} className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-full bg-foreground/70 text-background transition hover:bg-foreground">
+                    <Trash2 className="size-4" />
                   </button>
-                  <div className="mt-auto space-y-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handlePlay(card)}
-                      disabled={isLoading}
-                      className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold shadow-sm transition disabled:opacity-60 ${isPlaying ? "bg-foreground text-background" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
-                    >
-                      {isLoading ? <><Loader2 className="size-4 animate-spin" />Loading…</> : isPlaying ? <><Pause className="size-4" />Stop</> : <><Play className="size-4" />Play</>}
-                    </button>
-                    {voiceFallback[card.key] && <p className="text-center text-[11px] text-muted-foreground">Ready audio not saved — playing with on-device voice.</p>}
-                    <div className="grid grid-cols-3 gap-2">
-                      {card.image && !card.image.startsWith("data:") ? (
-                        <a href={card.image} download className="flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition hover:border-primary" title="Download image">
-                          <ImageIcon className="size-3.5" />Image
-                        </a>
-                      ) : (
-                        <a href={card.image} download={`${card.title}.jpg`} className="flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition hover:border-primary" title="Download image">
-                          <ImageIcon className="size-3.5" />Image
-                        </a>
-                      )}
-                      <button type="button" onClick={() => downloadText(card.title, card.kind, card.origin, card.narration, card.key)} className="flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition hover:border-primary" title="Download narration text">
-                        <FileText className="size-3.5" />Text
-                      </button>
-                      {card.audio ? (
-                        <a href={card.audio} download={`${card.title}.mp3`} className="flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition hover:border-primary" title="Download narration audio">
-                          <Download className="size-3.5" />Audio
-                        </a>
-                      ) : (
-                        <span className="flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold opacity-40" title="No ready audio saved">
-                          <Download className="size-3.5" />Audio
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-1 flex-col gap-2 p-4">
+                <h2 className="line-clamp-2 min-h-14 font-display text-xl font-semibold italic leading-snug">{card.title}</h2>
+                <p className="line-clamp-3 text-sm italic leading-relaxed text-muted-foreground">{excerpt(card.narration)}</p>
+                <div className="mt-auto pt-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDrawer(card);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-sm transition hover:bg-primary/90"
+                  >
+                    <Eye className="size-4" />Details
+                  </button>
                 </div>
-              </article>
-            );
-          })}
+              </div>
+            </article>
+          ))}
         </section>
+      )}
+
+      {/* ---- Right slide-in drawer ---- */}
+      {drawerCard && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Details of ${drawerCard.title}`}>
+          <div
+            className={`absolute inset-0 bg-foreground/40 transition-opacity duration-300 ${drawerOpen ? "opacity-100" : "opacity-0"}`}
+            onClick={closeDrawer}
+          />
+          <aside className={`absolute inset-y-0 right-0 flex w-full max-w-4xl flex-col bg-card shadow-2xl transition-transform duration-300 ease-out ${drawerOpen ? "translate-x-0" : "translate-x-full"}`}>
+            <button type="button" onClick={closeDrawer} aria-label="Close details" className="absolute right-3 top-3 z-10 flex size-9 items-center justify-center rounded-full bg-foreground/70 text-background transition hover:bg-foreground">
+              <X className="size-4" />
+            </button>
+            <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+              <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-[#EADCC8] sm:aspect-auto sm:min-h-full sm:w-[45%]">
+                {drawerCard.image ? (
+                  <img src={drawerCard.image} alt={drawerCard.title} className="absolute inset-0 block h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full min-h-48 items-center justify-center text-xs text-muted-foreground">No image</span>
+                )}
+              </div>
+
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
+                  <h2 className="font-display text-3xl font-semibold italic leading-tight">{drawerCard.title}</h2>
+                  <p className="whitespace-pre-line font-display text-base leading-relaxed">{drawerCard.narration}</p>
+                </div>
+
+                <div className="shrink-0 space-y-2 border-t border-border p-4">
+                  {renderPlayButton(drawerCard, true)}
+                  {audioNote[drawerCard.key] === "generated" && <p className="text-center text-[11px] text-muted-foreground">Audio is generated on play (requires the TTS server).</p>}
+                  {audioNote[drawerCard.key] === "browser" && <p className="text-center text-[11px] text-muted-foreground">TTS server is offline — playing with on-device voice.</p>}
+                  {!isProduction && drawerCard.userId && (
+                    <button type="button" onClick={() => handleDelete(drawerCard.userId!)} className="flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold text-muted-foreground transition hover:border-destructive hover:text-destructive">
+                      <Trash2 className="size-4" />Remove this example
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
       )}
     </main>
   );

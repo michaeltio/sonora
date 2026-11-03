@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 const VISION_PROMPT = `You are an expert Indonesian museum curator and accessibility narrator. Analyze the attached artwork for an English-speaking blind or low-vision listener.
-Return ONLY valid JSON, with no markdown and no prose outside the JSON. Every text value must be written in clear, natural English.
+Return ONLY valid JSON, with no markdown and no prose outside the JSON. Every text value must be written in clear, natural English. This is a strict requirement: NO Indonesian words anywhere in ANY field. If an Indonesian term comes to mind (for example a title, motif name, or object), either translate it into English or use the widely known English form.
+Before returning, self-check every string value: if it contains any non-English word, rewrite it in English first.
 
 First, perform an internal identification check. Decide whether the artwork can be reliably identified from visible evidence such as a readable label, signature, distinctive landmark, or highly specific recognizable composition. Do not identify a famous artist merely because the brushwork, colors, subject, or style feels similar. If the evidence is weak or ambiguous, set identity_status to "unknown". If there is a plausible but unverified possibility, set identity_status to "possible". Use "identified" only when the evidence is strong.
 
@@ -25,11 +26,11 @@ Return exactly this JSON shape:
   "artist": "A verified artist, a possible artist, or Unknown",
   "origin": "Verified Indonesian region or approximate period, or Unknown",
   "period": "Verified art historical period or century, or Unknown",
-  "objects": ["the most important visible subjects, in viewing order"],
+  "objects": ["the most important visible subjects in plain English, in viewing order (e.g. \"seated officer\", NOT \"perwira duduk\")],
   "colors": ["dominant colors as #RRGGBB values for internal processing only"],
-  "mood": "a concise emotional description in English",
-  "composition": "a clear spatial description using left, right, center, foreground, or background in English",
-  "symbolic_elements": ["recognizable symbols or attributes only if visibly supported"],
+  "mood": "a concise emotional description in plain English (e.g. \"solemn and tense\", NOT \"khidmat\")",
+  "composition": "a clear spatial description using left, right, center, foreground, or background, in plain English",
+  "symbolic_elements": ["recognizable symbols or attributes in plain English only if visibly supported"],
   "narration": "A 120–150 word English audio-guide narration following the identified or visual-only rules above"
 }
 
@@ -41,7 +42,6 @@ const VisionJsonSchema = z.object({
 });
 const RequestSchema = z.object({ image: z.string().min(1).refine((v) => v.startsWith("data:image/"), "image must be data URL").refine((v) => v.length < 10_000_000, "image too large") });
 
-const MOCK_POOL = [{ title: "Legong di Pura", artist: "I Gusti Nyoman Lempad", origin: "Bali", period: "Modern Indonesian 1950s", objects: ["seorang penari", "gerbang pura", "bunga kamboja", "sesajen"], colors: ["#B45309", "#FEF3C7", "#1E3A3A", "#DC2626"], mood: "hening dan sakral", composition: "tokoh utama berada di tengah, dengan gerbang pura di belakangnya", symbolic_elements: ["canang sari", "udeng"] }, { title: "Borobudur Relief Fragment", artist: "Unknown", origin: "Jawa", period: "Jawa Tengah abad ke-9", objects: ["relief batu", "stupa", "bunga teratai", "seorang biksu"], colors: ["#57534E", "#A8A29E", "#1C1917", "#D6C7B8"], mood: "hening dan meditatif", composition: "adegan memanjang dari kiri ke kanan seperti rangkaian cerita", symbolic_elements: ["roda dharma", "daun bodhi"] }];
 
 function colorName(hex: string) {
   const known: Record<string, string> = { "#B45309": "earthy orange", "#FEF3C7": "soft cream", "#1E3A3A": "deep blue-green", "#DC2626": "bright red", "#57534E": "stone gray", "#A8A29E": "warm gray", "#1C1917": "charcoal black", "#D6C7B8": "stone cream" };
@@ -68,4 +68,4 @@ async function callMuseVision(imageDataUrl: string) {
   const res = await fetch(apiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(isResponsesApi ? { model, input: [{ role: "user", content: [{ type: "input_text", text: VISION_PROMPT }, { type: "input_image", image_url: imageDataUrl }] }], stream: false } : { model, messages: [{ role: "user", content: [{ type: "text", text: VISION_PROMPT }, { type: "image_url", image_url: { url: imageDataUrl } }] }], temperature: 0.3, max_tokens: 700 }) }); if (!res.ok) throw new Error(`Muse API ${res.status}: ${(await res.text()).slice(0, 800)}`); const data = await res.json(); let text = data.output_text || data.choices?.[0]?.message?.content || data.choices?.[0]?.text || ""; if (!text && Array.isArray(data.output)) text = data.output.flatMap((x: any) => x.content || []).map((x: any) => x.text || x.output_text || "").join(""); const match = text.match(/\{[\s\S]*\}/); if (!match) throw new Error("Model did not return JSON"); const parsed = VisionJsonSchema.safeParse(JSON.parse(match[0])); if (!parsed.success) throw new Error("Model JSON failed validation"); return parsed.data;
 }
 
-export async function POST(req: NextRequest) { try { const parsed = RequestSchema.safeParse(await req.json()); if (!parsed.success) return NextResponse.json({ error: "Input tidak valid", details: parsed.error.issues }, { status: 400 }); let json: z.infer<typeof VisionJsonSchema> | null = await callMuseVision(parsed.data.image); let source: "muse" | "mock" = "muse"; let note: string | null = null; if (!json) { json = MOCK_POOL[Math.floor(Math.random() * MOCK_POOL.length)]; source = "mock"; note = "No Muse credentials configured — using mock."; } const { caption, tokens, listeningPrompt } = buildCaption(json); return NextResponse.json({ source, note, json, caption, tokens, listeningPrompt }); } catch (e) { return NextResponse.json({ error: "Gagal memanggil Muse", details: e instanceof Error ? e.message : String(e) }, { status: 502 }); } }
+export async function POST(req: NextRequest) { try { const parsed = RequestSchema.safeParse(await req.json()); if (!parsed.success) return NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 }); const json = await callMuseVision(parsed.data.image); if (!json) return NextResponse.json({ error: "Muse credentials are not configured", details: "Set MUSE_API_URL and MUSE_API_KEY in the environment.", hint: "Without credentials, the vision AI cannot run. There is no mock mode." }, { status: 503 }); const { caption, tokens, listeningPrompt } = buildCaption(json); return NextResponse.json({ source: "muse", note: null, json, caption, tokens, listeningPrompt }); } catch (e) { return NextResponse.json({ error: "Failed to call Muse", details: e instanceof Error ? e.message : String(e) }, { status: 502 }); } }

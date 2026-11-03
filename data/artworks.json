@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "raden-saleh-diponegoro-1857",
+      "title": "Penangkapan Pangeran Diponegoro",
+      "artist": "Raden Saleh",
+      "year": "1857",
+      "origin": "Java",
+      "period": "Romanticism, 19th century",
+      "category": "painting",
+      "summary": "Raden Saleh painted this work in 1857, depicting the arrest of Prince Diponegoro by Dutch forces under General De Kock at Magelang in 1830, the event that ended the Java War. The solemn and tense scene centers on Diponegoro's white robe against Dutch military uniforms, while his followers kneel in grief, a composition read as dignity under colonial power rather than surrender.",
+      "visual_cues": {
+        "objects": [
+          "Prince Diponegoro",
+          "man in white robe",
+          "prince in white robe",
+          "green turban",
+          "General De Kock",
+          "general in deep blue uniform",
+          "Dutch officers",
+          "officers on the porch",
+          "Dutch soldiers",
+          "mounted soldiers",
+          "military uniform",
+          "military uniforms",
+          "blue military uniforms",
+          "colonial building",
+          "columned porch",
+          "white pillars",
+          "Javanese followers",
+          "kneeling followers",
+          "kneeling woman",
+          "seated men in the foreground",
+          "woman bowing in grief",
+          "horse-drawn carriage",
+          "carriage driver on the right",
+          "top hat coachman",
+          "soldiers on horseback",
+          "distant mountains",
+          "mountains in background",
+          "seated crowd",
+          "tall black hat",
+          "white-columned porch",
+          "dark blue uniform",
+          "officer in dark blue uniform",
+          "palm tree",
+          "kneeling woman on the steps"
+        ],
+        "colors": [
+          "deep blue",
+          "warm cream",
+          "brick red",
+          "earth brown",
+          "ivory white"
+        ],
+        "composition": "crowded veranda scene, main figure center left on steps, officers left and center, kneeling followers in foreground, carriage right, mountains in background right, columned porch, seated men fill the lower edge, seated crowd fills the lower foreground, palm tree beside blue mountains in the background"
+      },
+      "identity_evidence": [
+        "Diponegoro in white robe and green turban standing on veranda steps",
+        "Dutch officers surrounding the central figure",
+        "followers kneeling and bowing in grief in the foreground",
+        "horse-drawn carriage waiting at right",
+        "colonial mansion with white pillars and mountains behind"
+      ],
+      "music_profile": "solemn-historical",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Raden_Saleh"
+      ]
+    },
+    {
+      "id": "self-portrait-affandi",
+      "title": "Self-Portrait (Potret Diri)",
+      "artist": "Affandi",
+      "year": "1975",
+      "origin": "Indonesia",
+      "period": "Expressionism",
+      "category": "painting",
+      "summary": "Affandi painted this self-portrait in 1975, showing his aged face in profile with eyes lowered and wild grey hair and beard. The swirling impasto, made by squeezing paint directly from the tube and shaping it by hand, turns aging and introspection into visible movement across the forehead, skin, and hair.",
+      "visual_cues": {
+        "objects": [
+          "Affandi self portrait",
+          "elderly man's head",
+          "older man's head",
+          "old man in profile",
+          "large head in profile",
+          "weathered face",
+          "balding forehead",
+          "closed eye",
+          "half-closed eye",
+          "grey beard",
+          "white mustache",
+          "white mustache and beard",
+          "swirling hair",
+          "wild hair",
+          "close-up head",
+          "plain background",
+          "face turning right"
+        ],
+        "colors": [
+          "beige",
+          "brick red",
+          "golden yellow",
+          "deep green",
+          "earth brown"
+        ],
+        "composition": "close-up three-quarter profile head filling the frame against a plain beige background, large head in center, wild hair on the left, face turning toward the right edge, signature top right"
+      },
+      "identity_evidence": [
+        "signature and date 75 at top right",
+        "direct tube-paint impasto technique",
+        "swirling expressive lines across face and hair",
+        "elderly self portrait with lowered eyes and grey beard"
+      ],
+      "music_profile": "warm-portrait",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Affandi"
+      ]
+    },
+    {
+      "id": "la-chasse-au-taureau-sauvage-raden-saleh",
+      "title": "La Chasse au taureau sauvage (Bull Hunt)",
+      "artist": "Raden Saleh",
+      "year": "1855",
+      "origin": "Indonesia",
+      "period": "Romanticism",
+      "category": "painting",
+      "summary": "Raden Saleh painted this wild bull hunt in 1855, showing mounted hunters surrounding a black banteng that has thrown a white horse to the ground in tall savanna grass. Rearing horses, raised weapons, and the fallen rider at the center make the mood frantic, dangerous, and tense, with calm mountains far behind the struggle.",
+      "visual_cues": {
+        "objects": [
+          "wild bull",
+          "black bull",
+          "large black bull",
+          "dark bull",
+          "bull attacking horse",
+          "banteng",
+          "fallen white horse",
+          "white horse rearing",
+          "rearing white horse",
+          "rearing brown horse",
+          "hunters on horseback",
+          "mounted hunter",
+          "mounted hunter on far left",
+          "mounted hunter with spear",
+          "hunter with spear",
+          "horsemen surrounding bull",
+          "rider in red jacket",
+          "man in red",
+          "raised arm",
+          "rider raising weapon",
+          "fallen rider",
+          "fallen horse and rider",
+          "fallen rider below bull",
+          "hunting dog",
+          "small dog",
+          "dog at lower left",
+          "dog near lower left edge",
+          "tall grass",
+          "savanna landscape"
+        ],
+        "colors": [
+          "warm cream",
+          "ivory white",
+          "blue",
+          "golden yellow",
+          "earth brown",
+          "leaf green",
+          "charcoal black",
+          "brick red",
+          "warm red"
+        ],
+        "composition": "chaotic hunt scene at center, large black bull at the center surrounded by rearing and fallen horses and mounted hunters on left and right, black bull attacking fallen horse in middle, tall grass in foreground, hills and mountains in background"
+      },
+      "identity_evidence": [
+        "black wild bull at center attacking a fallen white horse",
+        "mounted hunters surrounding the bull from both sides",
+        "fallen rider beneath the horse at center",
+        "hunting dog at lower left",
+        "savanna grassland with distant mountains behind"
+      ],
+      "music_profile": "solemn-historical",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Raden_Saleh"
+      ]
+    },
+    {
+      "id": "diponegoro-revolution-sudiardjo",
+      "title": "Perjuangan Kemerdekaan (Revolution)",
+      "artist": "Sudiardjo",
+      "year": "1945",
+      "origin": "Indonesia",
+      "period": "Realism / Indonesian Modern Art",
+      "category": "painting",
+      "summary": "Sudiardjo painted Perjuangan Kemerdekaan (Revolution) in 1945, the year Indonesia proclaimed its independence. Instead of a battlefield, the painting shows revolution as a dense wall of individual faces: fighters in berets and military caps, a woman at the center, and a small child below, all solemn, weary, and determined beneath handwritten words across the top.",
+      "visual_cues": {
+        "objects": [
+          "crowd of faces",
+          "many faces",
+          "many overlapping faces",
+          "overlapping heads",
+          "wall of faces",
+          "faces filling frame",
+          "man in beret",
+          "man in military cap",
+          "soldiers in caps",
+          "man with glasses",
+          "flat cap and glasses",
+          "woman in center",
+          "child face at bottom",
+          "small child face",
+          "handwritten text at top",
+          "text inscription across top",
+          "serious faces",
+          "man wearing beret",
+          "deep blue beret",
+          "men wearing military caps",
+          "man with eyeglasses",
+          "crowd of overlapping faces filling frame",
+          "man wearing deep blue beret",
+          "woman near center",
+          "small child near lower center"
+        ],
+        "colors": [
+          "earth brown",
+          "golden yellow",
+          "deep green",
+          "charcoal black",
+          "warm cream",
+          "brick red"
+        ],
+        "composition": "crowd of faces filling the whole frame, overlapping heads packed in rows, larger faces at center, faces cropped at edges, handwritten text across top"
+      },
+      "identity_evidence": [
+        "dense wall of overlapping faces filling the entire canvas",
+        "fighters wearing berets and military caps among civilians",
+        "woman and small child among the men's faces",
+        "handwritten inscription across the top edge",
+        "rough expressive brushwork in earth browns"
+      ],
+      "music_profile": "solemn-historical",
+      "sources": []
+    },
+    {
+      "id": "the-mystical-borobudur-srihadi",
+      "title": "The Mystical Borobudur",
+      "artist": "Srihadi Soedarsono",
+      "year": "2019",
+      "origin": "Indonesia",
+      "period": "Contemporary Indonesian Art",
+      "category": "painting",
+      "summary": "Srihadi Soedarsono painted The Mystical Borobudur in 2019, returning to the temple he depicted throughout his career as a symbol of spiritual endurance. Borobudur appears as a dark silhouette on a hill beneath a full moon, lit from behind by a band of pale light, while one small solitary figure sits in the empty golden field below. The mood is serene, mystical, and meditative.",
+      "visual_cues": {
+        "objects": [
+          "full moon",
+          "moon in dark sky",
+          "moon at top center",
+          "Borobudur temple",
+          "silhouette of Borobudur temple",
+          "temple silhouette",
+          "temple on hill",
+          "dark hill",
+          "band of light",
+          "light on horizon",
+          "small figure in field",
+          "small seated figure",
+          "solitary figure",
+          "seated figure",
+          "figure in golden field",
+          "golden field",
+          "empty field",
+          "empty plain",
+          "night landscape",
+          "dark night sky",
+          "dark rounded hill",
+          "pointed temple shape",
+          "temple shape on hilltop",
+          "wide flat plain",
+          "small solitary human figure"
+        ],
+        "colors": [
+          "charcoal black",
+          "deep blue",
+          "ivory white",
+          "golden yellow",
+          "leaf green",
+          "earth brown"
+        ],
+        "composition": "vast dark sky above, moon at top center, temple silhouette on hill at center horizon, band of light behind hill, empty golden field below, small figure lower left foreground"
+      },
+      "identity_evidence": [
+        "Borobudur temple silhouette on a hill at the horizon",
+        "full moon centered in a vast dark night sky",
+        "band of pale light glowing behind the temple",
+        "single small figure alone in an empty golden field"
+      ],
+      "music_profile": "spacious-sculpture",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Srihadi_Soedarsono"
+      ]
+    }
+  ]
+}

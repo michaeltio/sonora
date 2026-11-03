@@ -13,13 +13,13 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body harus JSON valid.", details: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body.", details: "Invalid JSON" }, { status: 400 });
   }
 
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Input tidak valid", details: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) },
+      { error: "Invalid input", details: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) },
       { status: 400 }
     );
   }
@@ -91,8 +91,8 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(
     {
-      error: "Tidak ada TTS endpoint yang aktif",
-      details: "Set XTTS_URL (server XTTS Colab) atau TTS_URL (hosted /speak endpoint) di environment.",
+      error: "No active TTS endpoint",
+      details: "Set XTTS_URL (XTTS server) or TTS_URL (hosted /speak endpoint) in the environment.",
     },
     { status: 503 }
   );
