@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bufferToWavUrl, decodeAny, mixBuffers, synthesizeGamelan } from "@/lib/audio-mixer";
 import { fetchWithTimeout } from "@/lib/mixed-playback";
+import { generateOfflineSpeechUrl } from "@/lib/offline-tts";
 
 export type MixState = "idle" | "loading-tts" | "loading-music" | "ready" | "playing" | "exporting";
 export type MusicPreset = "gamelan-calm" | "gamelan-meditative" | "ambient-warm";
@@ -13,7 +14,8 @@ export interface MixedPlayer {
   ttsUrl: string | null;
   musicUrl: string | null;
   mixedUrl: string | null;
-  ttsSource: "server" | "browser" | null;
+  ttsSource: "server" | "browser" | "offline" | null;
+  ttsProgress: string | null;
   ttsVolume: number;
   musicVolume: number;
   preset: MusicPreset;
@@ -38,7 +40,8 @@ export function useMixedPlayer(): MixedPlayer {
   const [state, setState] = useState<MixState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [ttsUrl, setTtsUrl] = useState<string | null>(null);
-  const [ttsSource, setTtsSource] = useState<"server" | "browser" | null>(null);
+  const [ttsSource, setTtsSource] = useState<"server" | "browser" | "offline" | null>(null);
+  const [ttsProgress, setTtsProgress] = useState<string | null>(null);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mixedUrl, setMixedUrl] = useState<string | null>(null);
   const [ttsVolume, setTtsVolume] = useState(1);
@@ -129,20 +132,57 @@ export function useMixedPlayer(): MixedPlayer {
         resolve();
       };
       speakFinishRef.current = finish;
+      const startSpeaking = () => {
+        try {
+          const synth = window.speechSynthesis;
+          synth.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = "en-US";
+          const voice = pickEnglishVoice();
+          if (voice) u.voice = voice;
+          u.rate = 1;
+          u.pitch = 1;
+          const resumeTimer = window.setInterval(() => {
+            try {
+              if (synth.speaking && !synth.pending) synth.resume();
+            } catch {}
+          }, 5000);
+          const doneSpeaking = () => {
+            window.clearInterval(resumeTimer);
+            finish();
+          };
+          u.onend = doneSpeaking;
+          u.onerror = doneSpeaking;
+          const words = text.trim().split(/\s+/).filter(Boolean).length;
+          speakTimeoutRef.current = window.setTimeout(
+            doneSpeaking,
+            Math.max(8000, (words / 2.2) * 1000 + 6000)
+          );
+          setTimeout(() => {
+            try {
+              synth.speak(u);
+            } catch {
+              doneSpeaking();
+            }
+          }, 120);
+        } catch {
+          finish();
+        }
+      };
       try {
-        const synth = window.speechSynthesis;
-        synth.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = "en-US";
-        const voice = pickEnglishVoice();
-        if (voice) u.voice = voice;
-        u.rate = 1;
-        u.pitch = 1;
-        u.onend = finish;
-        u.onerror = finish;
-        const words = text.trim().split(/\s+/).filter(Boolean).length;
-        speakTimeoutRef.current = window.setTimeout(finish, Math.max(8000, (words / 2.2) * 1000 + 6000));
-        synth.speak(u);
+        if (window.speechSynthesis.getVoices().length > 0) {
+          startSpeaking();
+        } else {
+          let started = false;
+          const startOnce = () => {
+            if (started) return;
+            started = true;
+            window.clearTimeout(timer);
+            startSpeaking();
+          };
+          const timer = window.setTimeout(startOnce, 1500);
+          window.speechSynthesis.addEventListener("voiceschanged", startOnce, { once: true });
+        }
       } catch {
         finish();
       }
@@ -214,8 +254,20 @@ export function useMixedPlayer(): MixedPlayer {
       serverError = e instanceof Error ? e.message : String(e);
     }
 
+    try {
+      const offlineUrl = await generateOfflineSpeechUrl(text, (m) => setTtsProgress(m));
+      if (offlineUrl) {
+        setTtsUrl(offlineUrl);
+        setTtsSource("offline");
+        setTtsProgress(null);
+        setMixedUrl((old) => { if (old) URL.revokeObjectURL(old); return null; });
+        mixedBufRef.current = null;
+        setState("ready");
+        return offlineUrl;
+      }
+    } catch {}
+    setTtsProgress(null);
     if (useBrowserFallback()) return null;
-    setError(serverError || "TTS unavailable and no on-device voice found.");
     setState("idle");
     return null;
   }
@@ -414,7 +466,7 @@ export function useMixedPlayer(): MixedPlayer {
   }
 
   return {
-    state, error, ttsUrl, musicUrl, mixedUrl, ttsSource,
+    state, error, ttsUrl, musicUrl, mixedUrl, ttsSource, ttsProgress,
     ttsVolume, musicVolume, preset, durationSec,
     setTtsVolume, setMusicVolume, setPreset, setDurationSec,
     setMusicUrl, loadBgm,

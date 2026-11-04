@@ -22,7 +22,7 @@ Upload → classify → identify if reliable → generate narration → mix voic
 <tr><td><b>Presentation mode</b></td><td>PowerPoint-like fullscreen showcase with auto-narration, tap-anywhere play/pause, swipe and arrow-key navigation, captions overlay, and screen-reader announcements. Built blind-first: no need to find a button.</td></tr>
 <tr><td><b>Static showcase, zero API cost</b></td><td>Four bundled examples ship as pre-generated MP3 + full-res JPG in <code>public/examples</code>, so <code>/examples</code> plays instantly for every visitor with no AI requests.</td></tr>
 <tr><td><b>Knowledge base</b></td><td>Curated artwork entries in <code>data/artworks.json</code> with a test-before-save flow: check a candidate entry against Muse vision and get an automatic music-profile suggestion.</td></tr>
-<tr><td><b>Bring-your-own TTS chain</b></td><td>Local XTTS (GPU) → hosted Edge voices (free) → on-device browser voice. If every server is down, the app still speaks.</td></tr>
+<tr><td><b>No server needed for voice</b></td><td>The live app speaks with a built-in offline neural voice (Kokoro 82M, in-browser) because production TTS models cannot be hosted — with local XTTS or hosted Edge voices as optional upgrades.</td></tr>
 </table>
 
 ---
@@ -42,16 +42,17 @@ bun install
 cp .env.example .env.local   # then fill in the keys (see Configuration)
 ```
 
-Start the TTS backend (pick one — see [TTS options](#tts-options)):
+Start the TTS backend (optional — the app ships with a built-in offline voice, see [TTS options](#tts-options)):
 
 ```bash
-# Option A — local XTTS (best quality, needs GPU for real-time)
+# Default — nothing to install. The app uses its built-in offline voice.
+# Just run it; the voice model downloads once (~90 MB) on first use.
+
+# Optional upgrade A — local XTTS (best quality, needs GPU for real-time)
 cd tts-server && ./run.sh    # Windows: run.bat (double-click)
 
-# Option B — hosted Edge voices, no setup at all
+# Optional upgrade B — hosted Edge voices, no local setup
 # just set TTS_URL + TTS_KEY in .env.local (see tts-space/README.md)
-
-# Option C — nothing. The app falls back to the on-device browser voice.
 ```
 
 Then run the app:
@@ -90,11 +91,14 @@ Scan history thumbnails are capped at 160&nbsp;px and example audio is MP3-compr
 
 ## TTS options
 
-Sonora never depends on a single voice provider. `/api/tts` tries each backend in order and the UI degrades gracefully:
+> **Current hosting: offline voice.** Production TTS models cannot be hosted on the current infrastructure (XTTS needs a GPU server, hosted endpoints are unreliable), so the live app speaks with the built-in offline voice by default — no backend required.
 
-1. **Local XTTS** (`XTTS_URL`, `XTTS_SPEAKER_WAV`) — self-hosted FastAPI in `tts-server/`, ~2&nbsp;GB model, CUDA when available. Highest quality, fully offline-capable.
-2. **Hosted Edge voices** (`TTS_URL`, `TTS_KEY`) — free CPU server in `tts-space/` (Render free tier or any Docker host), Microsoft neural voices, no API key needed on the server side.
-3. **On-device browser voice** — zero configuration, zero requests. Used automatically when both servers are unreachable.
+Sonora tries each voice backend in order and the UI degrades gracefully:
+
+1. **Built-in offline voice (Kokoro 82M)** — the default. A real neural TTS that runs 100% in the browser, no server needed. Downloaded once (~90&nbsp;MB, cached afterwards), rendering happens in a Web Worker so the page never freezes.
+2. **Local XTTS** (`XTTS_URL`, `XTTS_SPEAKER_WAV`) — optional upgrade. Self-hosted FastAPI in `tts-server/`, ~2&nbsp;GB model, CUDA when available. Highest quality, fully offline-capable.
+3. **Hosted Edge voices** (`TTS_URL`, `TTS_KEY`) — optional upgrade. Free CPU server in `tts-space/` (Render free tier or any Docker host), Microsoft neural voices, no API key needed on the server side.
+4. **On-device browser voice** — zero configuration, zero requests. Last resort when everything above is unavailable.
 
 One line in `.env.local` switches providers — no code changes.
 

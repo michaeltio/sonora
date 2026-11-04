@@ -117,10 +117,11 @@ export default function IndexPage() {
             >
               {isBusy ? <><Loader2 className="size-5 animate-spin" />Preparing audio…</> : isPlaying ? <><Square className="size-5" />Stop</> : <><Play className="size-5" />Play narration</>}
             </button>
+            {isBusy && mix.ttsProgress && <p className="text-center text-xs font-medium text-muted-foreground">{mix.ttsProgress}</p>}
             {mix.error && <p className="rounded-lg bg-destructive/10 px-4 py-2.5 text-center text-sm font-medium text-destructive">{mix.error}</p>}
-        {mix.ttsSource === "browser" && (
+        {(mix.ttsSource === "browser" || mix.ttsSource === "offline") && (
           <p className="flex items-center justify-center gap-1.5 rounded-lg bg-secondary/60 px-4 py-2 text-center text-xs font-medium text-muted-foreground">
-            <Volume2 className="size-4" /> Using on-device English voice — TTS server unreachable
+            <Volume2 className="size-4" /> {mix.ttsSource === "offline" ? "Using built-in offline voice — TTS server unreachable" : "Using on-device English voice — TTS server unreachable"}
           </p>
         )}
 

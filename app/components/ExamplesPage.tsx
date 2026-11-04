@@ -31,7 +31,7 @@ export default function ExamplesPageClient() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [drawerCard, setDrawerCard] = useState<Card | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [audioNote, setAudioNote] = useState<Record<string, "generated" | "browser">>({});
+  const [audioNote, setAudioNote] = useState<Record<string, "generated" | "browser" | "offline">>({});
 
   const [presenting, setPresenting] = useState(false);
   const [slide, setSlide] = useState(0);
@@ -125,7 +125,7 @@ export default function ExamplesPageClient() {
         return;
       }
       gridHandleRef.current = handle;
-      if (note === "generated" || note === "browser") {
+      if (note === "generated" || note === "browser" || note === "offline") {
         setAudioNote((m) => ({ ...m, [card.key]: note }));
       }
       setPlayingId(card.key);
@@ -174,6 +174,7 @@ export default function ExamplesPageClient() {
         narrationUrl: card.audio,
         narrationText: card.narration,
         musicUrl: card.music,
+        onProgress: (message) => setPresentStatus(message),
         onEnded: () => {
           setPresentPlaying(false);
           if (autoNarrateRef.current && slideRef.current < cardsRef.current.length - 1) {
@@ -379,6 +380,7 @@ export default function ExamplesPageClient() {
                   </button>
                   {audioNote[drawerCard.key] === "generated" && <p className="text-center text-[11px] text-muted-foreground">Audio is generated on play (requires the TTS server).</p>}
                   {audioNote[drawerCard.key] === "browser" && <p className="text-center text-[11px] text-muted-foreground">TTS server is offline — playing with on-device voice.</p>}
+                  {audioNote[drawerCard.key] === "offline" && <p className="text-center text-[11px] text-muted-foreground">TTS server is offline — playing with the built-in offline voice.</p>}
                 </div>
               </div>
             </div>

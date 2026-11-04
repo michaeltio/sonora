@@ -1,8 +1,9 @@
 "use client";
 
 import { dataUrlToAudioBuffer, fetchAudioBuffer } from "@/lib/audio-mixer";
+import { generateOfflineSpeechUrl } from "@/lib/offline-tts";
 
-export type MixedNote = "mixed" | "narration-only" | "browser" | "generated";
+export type MixedNote = "mixed" | "narration-only" | "browser" | "generated" | "offline";
 
 export interface MixedHandle {
   stop(): void;
@@ -77,11 +78,28 @@ function pickEnglishVoice(): SpeechSynthesisVoice | null {
   }
 }
 
+function waitForVoices(timeoutMs = 1500): Promise<void> {
+  try {
+    if (window.speechSynthesis.getVoices().length > 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(resolve, timeoutMs);
+      const done = () => {
+        window.clearTimeout(timer);
+        resolve();
+      };
+      window.speechSynthesis.addEventListener("voiceschanged", done, { once: true });
+    });
+  } catch {
+    return Promise.resolve();
+  }
+}
+
 export async function playMixedNarration(opts: {
   narrationUrl: string | null;
   narrationText: string;
   musicUrl: string | null;
   musicVolume?: number;
+  onProgress?: (message: string) => void;
   onEnded?: () => void;
 }): Promise<{ handle: MixedHandle; note: MixedNote }> {
   const bed = Math.max(0, Math.min(opts.musicVolume ?? 0.12, 0.6));
@@ -137,17 +155,31 @@ export async function playMixedNarration(opts: {
         sources = [musicSrc];
         musicSrc.start(0);
       }
+      await waitForVoices();
+      if (settled) return "browser";
       window.speechSynthesis.cancel();
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      if (settled) return "browser";
       const u = new SpeechSynthesisUtterance(opts.narrationText);
       u.lang = "en-US";
       u.rate = 0.95;
       const voice = pickEnglishVoice();
       if (voice) u.voice = voice;
+      const resumeTimer = window.setInterval(() => {
+        try {
+          if (window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+            window.speechSynthesis.resume();
+          }
+        } catch {}
+      }, 5000);
+      const cleanup = () => window.clearInterval(resumeTimer);
       u.onend = () => {
+        cleanup();
         stop();
         fireEnded();
       };
       u.onerror = () => {
+        cleanup();
         stop();
         fireEnded();
       };
@@ -166,6 +198,12 @@ export async function playMixedNarration(opts: {
   if (!narrationUrl) {
     narrationUrl = await fetchGeneratedNarration(opts.narrationText);
     note = "generated";
+    if (settled) return { handle: { stop }, note };
+  }
+  if (!narrationUrl) {
+    opts.onProgress?.("Server voice unreachable. Rendering offline voice…");
+    narrationUrl = await generateOfflineSpeechUrl(opts.narrationText, opts.onProgress);
+    if (narrationUrl) note = "offline";
     if (settled) return { handle: { stop }, note };
   }
 
@@ -211,7 +249,7 @@ export async function playMixedNarration(opts: {
       ttsSrc.onended = () => fireEnded();
       sources = [ttsSrc];
       ttsSrc.start(0);
-      return { handle: { stop }, note: "narration-only" };
+      return { handle: { stop }, note: note === "mixed" ? "narration-only" : note };
     }
 
     const t0 = ctx.currentTime + 0.05;
@@ -258,6 +296,6 @@ export async function playMixedNarration(opts: {
   } catch {
     stop();
     fireEnded();
-    return { handle: { stop }, note: "narration-only" };
+    return { handle: { stop }, note: note === "mixed" ? "narration-only" : note };
   }
 }
