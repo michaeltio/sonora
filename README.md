@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/FastAPI-XTTS-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI XTTS">
 </p>
 
-**Scan Indonesian art. Hear every detail.** Sonora is an accessible English audio-guide web app for Indonesian art and heritage. Photograph or upload a painting, sculpture, or textile — Sonora identifies what can be seen, narrates it in clear emotionally-engaging language, and plays it back like a museum audio guide: voice over a subtle loop of Indonesian background music.
+**Scan Indonesian art. Hear every detail.** Sonora is an accessible English audio-guide web app for Indonesian art and heritage. Photograph or upload a painting, sculpture, or textile — Sonora identifies what can be seen, narrates it in clear emotionally-engaging language, and plays it back like a museum audio guide: voice over Indonesian background music.
 
 Upload → classify → identify if reliable → generate narration → mix voice + music → play. One click, no playlists, no setup for the listener.
 

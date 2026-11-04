@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bufferToWavUrl, decodeAny, mixBuffers, synthesizeGamelan } from "@/lib/audio-mixer";
+import { fetchWithTimeout } from "@/lib/mixed-playback";
 
 export type MixState = "idle" | "loading-tts" | "loading-music" | "ready" | "playing" | "exporting";
 export type MusicPreset = "gamelan-calm" | "gamelan-meditative" | "ambient-warm";
@@ -189,11 +190,15 @@ export function useMixedPlayer(): MixedPlayer {
 
     let serverError: string | null = null;
     try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, language: lang }),
-      });
+      const res = await fetchWithTimeout(
+        "/api/tts",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, language: lang }),
+        },
+        120000
+      );
       const data = await res.json().catch(() => null);
       if (res.ok && data?.audio) {
         const url = data.audio as string;
@@ -219,11 +224,15 @@ export function useMixedPlayer(): MixedPlayer {
     setError(null);
     setState("loading-music");
     try {
-      const res = await fetch("/api/music", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt ?? preset, duration: durationSec }),
-      });
+      const res = await fetchWithTimeout(
+        "/api/music",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: prompt ?? preset, duration: durationSec }),
+        },
+        90000
+      );
       const data = await res.json().catch(() => null);
       if (data?.audio && typeof data.audio === "string" && data.audio.startsWith("data:")) {
         setMusicUrl(data.audio);

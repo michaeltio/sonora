@@ -13,6 +13,23 @@ function decodeAudio(url: string, ctx: AudioContext): Promise<AudioBuffer> {
   return fetchAudioBuffer(url, ctx);
 }
 
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  ms: number
+): Promise<Response> {
+  if (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
+    return fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 let sharedCtx: AudioContext | null = null;
 
 function ensureCtx(): AudioContext {
@@ -30,11 +47,15 @@ function ensureCtx(): AudioContext {
 
 async function fetchGeneratedNarration(text: string): Promise<string | null> {
   try {
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, language: "en" }),
-    });
+    const res = await fetchWithTimeout(
+      "/api/tts",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, language: "en" }),
+      },
+      120000
+    );
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.audio) return null;
     return data.audio as string;

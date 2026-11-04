@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       const r = await fetch(xttsUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(180000),
         body: JSON.stringify({
           text,
           language,
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
       const r = await fetch(ttsUrl, {
         method: "POST",
         headers,
+        signal: AbortSignal.timeout(90000),
         body: JSON.stringify({ text, language }),
       });
       const data = await r.json().catch(() => null);
