@@ -7,6 +7,57 @@ const RequestSchema = z.object({
   speaker_wav: z.string().optional(),
 });
 
+function splitForGoogleTts(text: string, maxChars = 200): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]+["”)]?\s*|[^.!?]+$/g) || [text];
+  const chunks: string[] = [];
+  let current = "";
+  for (const s of sentences) {
+    const piece = s.trim();
+    if (!piece) continue;
+    if ((current + " " + piece).trim().length > maxChars && current) {
+      chunks.push(current.trim());
+      current = piece;
+    } else {
+      current = (current + " " + piece).trim();
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.length > 0 ? chunks : [text];
+}
+
+async function fetchGoogleTts(text: string, language: string): Promise<Buffer | null> {
+  const tl = (language || "en").split("-")[0] || "en";
+  const chunks = splitForGoogleTts(text);
+  const parts: Buffer[] = [];
+  for (const chunk of chunks) {
+    const url =
+      "https://translate.google.com/translate_tts?client=tw-ob&tl=" +
+      encodeURIComponent(tl) +
+      "&q=" +
+      encodeURIComponent(chunk);
+    try {
+      const r = await fetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+          Referer: "https://translate.google.com/",
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) return null;
+      const contentType = r.headers.get("content-type") || "";
+      if (!contentType.includes("audio") && !contentType.includes("octet-stream")) return null;
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length < 1000) return null;
+      parts.push(buf);
+    } catch {
+      return null;
+    }
+  }
+  if (parts.length === 0) return null;
+  return Buffer.concat(parts);
+}
+
 export async function POST(req: NextRequest) {
   let body: unknown;
   try {
@@ -83,6 +134,20 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.warn("[tts] hosted TTS error:", e instanceof Error ? e.message : String(e));
     }
+  }
+
+  try {
+    const googleBuf = await fetchGoogleTts(text, language);
+    if (googleBuf) {
+      return NextResponse.json({
+        source: "google-translate",
+        audio: `data:audio/mp3;base64,${googleBuf.toString("base64")}`,
+        mime: "audio/mpeg",
+      });
+    }
+    console.warn("[tts] google translate TTS unavailable");
+  } catch (e) {
+    console.warn("[tts] google translate TTS error:", e instanceof Error ? e.message : String(e));
   }
 
   return NextResponse.json(

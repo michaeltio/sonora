@@ -22,7 +22,7 @@ Upload → classify → identify if reliable → generate narration → mix voic
 <tr><td><b>Presentation mode</b></td><td>PowerPoint-like fullscreen showcase with auto-narration, tap-anywhere play/pause, swipe and arrow-key navigation, captions overlay, and screen-reader announcements. Built blind-first: no need to find a button.</td></tr>
 <tr><td><b>Static showcase, zero API cost</b></td><td>Four bundled examples ship as pre-generated MP3 + full-res JPG in <code>public/examples</code>, so <code>/examples</code> plays instantly for every visitor with no AI requests.</td></tr>
 <tr><td><b>Knowledge base</b></td><td>Curated artwork entries in <code>data/artworks.json</code> with a test-before-save flow: check a candidate entry against Muse vision and get an automatic music-profile suggestion.</td></tr>
-<tr><td><b>No server needed for voice</b></td><td>The live app speaks with a built-in offline neural voice (Kokoro 82M, in-browser) because production TTS models cannot be hosted — with local XTTS or hosted Edge voices as optional upgrades.</td></tr>
+<tr><td><b>No TTS server hosted</b></td><td>The live app uses only fallback voices — a fast Google Translate proxy first, then a built-in offline neural voice (Kokoro 82M, in-browser). No XTTS or hosted TTS backend is deployed; local XTTS / hosted Edge remain optional upgrades.</td></tr>
 </table>
 
 ---
@@ -69,7 +69,7 @@ bun dev     # http://localhost:3000
 
 #### Narration plays but with a robotic voice
 
-That is the on-device fallback: both `XTTS_URL` and `TTS_URL` are unreachable. Start one of the TTS backends above; the next play uses it automatically.
+That is the last-resort on-device fallback: the TTS chain (XTTS → hosted → Google proxy → offline neural voice) all failed. If you run your own backend, set `XTTS_URL` or `TTS_URL` and the next play uses it automatically.
 
 #### `localStorage` quota errors
 
@@ -91,14 +91,15 @@ Scan history thumbnails are capped at 160&nbsp;px and example audio is MP3-compr
 
 ## TTS options
 
-> **Current hosting: offline voice.** Production TTS models cannot be hosted on the current infrastructure (XTTS needs a GPU server, hosted endpoints are unreliable), so the live app speaks with the built-in offline voice by default — no backend required.
+> **Current hosting: no TTS server is deployed.** Production TTS models cannot be hosted on the current infrastructure, so the live app speaks entirely through fallback voices — no backend of yours required.
 
 Sonora tries each voice backend in order and the UI degrades gracefully:
 
-1. **Built-in offline voice (Kokoro 82M)** — the default. A real neural TTS that runs 100% in the browser, no server needed. Downloaded once (~90&nbsp;MB, cached afterwards), rendering happens in a Web Worker so the page never freezes.
-2. **Local XTTS** (`XTTS_URL`, `XTTS_SPEAKER_WAV`) — optional upgrade. Self-hosted FastAPI in `tts-server/`, ~2&nbsp;GB model, CUDA when available. Highest quality, fully offline-capable.
-3. **Hosted Edge voices** (`TTS_URL`, `TTS_KEY`) — optional upgrade. Free CPU server in `tts-space/` (Render free tier or any Docker host), Microsoft neural voices, no API key needed on the server side.
-4. **On-device browser voice** — zero configuration, zero requests. Last resort when everything above is unavailable.
+1. **Google Translate TTS proxy** — the default path. No key, no model, ~1 second per narration, KB-sized MP3. Best effort (unofficial endpoint).
+2. **Built-in offline voice (Kokoro 82M)** — a real neural TTS that runs 100% in the browser. Downloaded once (~90&nbsp;MB, cached afterwards), rendering happens in a Web Worker so the page never freezes.
+3. **Local XTTS** (`XTTS_URL`, `XTTS_SPEAKER_WAV`) — optional upgrade, not hosted. Self-hosted FastAPI in `tts-server/`, ~2&nbsp;GB model, CUDA when available. Highest quality, fully offline-capable.
+4. **Hosted Edge voices** (`TTS_URL`, `TTS_KEY`) — optional upgrade, not hosted. Free CPU server in `tts-space/` (Render free tier or any Docker host), Microsoft neural voices, no API key needed on the server side.
+5. **On-device browser voice** — zero configuration, zero requests. Last resort when everything above is unavailable.
 
 One line in `.env.local` switches providers — no code changes.
 
@@ -120,7 +121,7 @@ One line in `.env.local` switches providers — no code changes.
 | ----- | ------ | ------------ |
 | `/api/describe` | `POST` | Muse vision only: `{ image }` → caption, tokens, listening prompt |
 | `/api/generate` | `POST` | Full pipeline: `{ image }` → title, kind, origin, narration + paired `{ music.url, music.label }` |
-| `/api/tts` | `POST` | `{ text, language }` → `{ audio: dataUrl }` via the XTTS → hosted → error chain |
+| `/api/tts` | `POST` | `{ text, language }` → `{ audio: dataUrl }` via the XTTS → hosted → Google Translate proxy chain (503 only if all fail; the client then tries offline neural → browser voice) |
 | `/api/music` | `POST` | Background-music pairing/generation for a narration |
 | `/api/kb/save` | `POST` | Persist a new entry to the knowledge base |
 | `/api/kb/test` | `POST` | Score a candidate entry against vision + suggest a music profile |
@@ -157,6 +158,9 @@ sonora/
 ├── lib/                    Client + server helpers
 │   ├── use-mixed-player.ts Web Audio mixer (intro → duck → loop → fade)
 │   ├── mixed-playback.ts   Standalone mix-and-play used by Examples/Present
+│   ├── offline-tts.ts      Offline neural voice manager (Web Worker + cache)
+│   ├── kokoro.worker.ts    Kokoro 82M inference off the main thread
+│   ├── kokoro-utils.ts     Text chunking + WAV encoding for offline voice
 │   ├── audio-mixer.ts      Decode, mix, synthesize, WAV export
 │   ├── examples.ts         Bundled showcase entries (image + audio + music)
 │   ├── bgm-tracks.ts       9 static BGM tracks + mood vectors
@@ -174,9 +178,9 @@ sonora/
 
 ## Deployment
 
-**App (Vercel):** push the repo, set the env vars from [Configuration](#configuration) in the Vercel dashboard, deploy. `/examples` needs no backend — its audio and images are static files.
+**App (Vercel):** push the repo, set the env vars from [Configuration](#configuration) in the Vercel dashboard, deploy. No TTS backend is deployed — leave `XTTS_URL`/`TTS_URL` empty and the app speaks through the Google Translate proxy, then the built-in offline voice. (Muse keys are still required for the Scan page to narrate.) `/examples` needs no backend at all — its audio and images are static files.
 
-**Hosted TTS (Render, free):** push with root directory `tts-space`, build `pip install -r requirements.txt`, start `uvicorn server:app --host 0.0.0.0 --port $PORT` (or use the included `render.yaml`). Copy the service URL into `TTS_URL` on Vercel.
+**Hosted TTS (Render, free — optional, not currently deployed):** push with root directory `tts-space`, build `pip install -r requirements.txt`, start `uvicorn server:app --host 0.0.0.0 --port $PORT` (or use the included `render.yaml`). Copy the service URL into `TTS_URL` on Vercel.
 
 ---
 
