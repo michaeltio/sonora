@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, Loader2, Pause, Play, Presentation, X } from "lucide-react";
 import { EXAMPLES } from "@/lib/examples";
+import { playMixedNarration, type MixedHandle } from "@/lib/mixed-playback";
 
 type Card = {
   key: string;
@@ -13,6 +14,7 @@ type Card = {
   image: string;
   audio: string | null;
   musicLabel?: string;
+  music: string | null;
 };
 
 function excerpt(text: string, words = 16): string {
@@ -22,8 +24,9 @@ function excerpt(text: string, words = 16): string {
 }
 
 export default function ExamplesPageClient() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const gridHandleRef = useRef<MixedHandle | null>(null);
+  const gridPlayIdRef = useRef(0);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [drawerCard, setDrawerCard] = useState<Card | null>(null);
@@ -37,7 +40,8 @@ export default function ExamplesPageClient() {
   const [showCaption, setShowCaption] = useState(true);
   const [presentStatus, setPresentStatus] = useState("");
   const presentBoxRef = useRef<HTMLDivElement | null>(null);
-  const presentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const presentHandleRef = useRef<MixedHandle | null>(null);
+  const presentPlayIdRef = useRef(0);
   const touchXRef = useRef<number | null>(null);
   const cardsRef = useRef<Card[]>([]);
   const slideRef = useRef(0);
@@ -52,6 +56,7 @@ export default function ExamplesPageClient() {
       image: e.image,
       audio: e.audio as string | null,
       musicLabel: e.musicLabel,
+      music: e.music ?? null,
     }));
   cardsRef.current = cards;
   slideRef.current = slide;
@@ -60,13 +65,8 @@ export default function ExamplesPageClient() {
   const slideCard = cards[safeSlide];
 
   useEffect(() => {
-    const audio = new Audio();
-    audioRef.current = audio;
-    const onEnded = () => setPlayingId(null);
-    audio.addEventListener("ended", onEnded);
     return () => {
-      audio.pause();
-      audio.removeEventListener("ended", onEnded);
+      gridHandleRef.current?.stop();
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     };
   }, []);
@@ -98,46 +98,11 @@ export default function ExamplesPageClient() {
   }
 
   function stopAll() {
-    audioRef.current?.pause();
+    gridHandleRef.current?.stop();
+    gridHandleRef.current = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     setPlayingId(null);
     setLoadingId(null);
-  }
-
-  function speakWithBrowser(key: string, narration: string) {
-    if (!("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(narration);
-    u.lang = "en-US";
-    u.rate = 0.95;
-    u.onend = () => setPlayingId(null);
-    u.onerror = () => setPlayingId(null);
-    setPlayingId(key);
-    setLoadingId(null);
-    window.speechSynthesis.speak(u);
-  }
-
-  async function playGenerated(card: Card) {
-    setLoadingId(card.key);
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: card.narration, language: "en" }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.audio) throw new Error(data?.error || "TTS failed");
-      const audio = audioRef.current;
-      if (!audio) throw new Error("no audio element");
-      audio.src = data.audio as string;
-      await audio.play();
-      setPlayingId(card.key);
-      setLoadingId(null);
-      setAudioNote((m) => ({ ...m, [card.key]: "generated" }));
-    } catch {
-      setAudioNote((m) => ({ ...m, [card.key]: "browser" }));
-      speakWithBrowser(card.key, card.narration);
-    }
   }
 
   async function handlePlay(card: Card) {
@@ -146,37 +111,31 @@ export default function ExamplesPageClient() {
       return;
     }
     stopAll();
-    const audio = audioRef.current;
-    if (card.audio && audio) {
-      setLoadingId(card.key);
-      audio.src = card.audio;
-      try {
-        await audio.play();
-        setPlayingId(card.key);
-        setLoadingId(null);
+    const myPlay = ++gridPlayIdRef.current;
+    setLoadingId(card.key);
+    try {
+      const { handle, note } = await playMixedNarration({
+        narrationUrl: card.audio,
+        narrationText: card.narration,
+        musicUrl: card.music,
+        onEnded: () => setPlayingId(null),
+      });
+      if (gridPlayIdRef.current !== myPlay) {
+        handle.stop();
         return;
-      } catch {
       }
+      gridHandleRef.current = handle;
+      if (note === "generated" || note === "browser") {
+        setAudioNote((m) => ({ ...m, [card.key]: note }));
+      }
+      setPlayingId(card.key);
+    } catch {
+      if (gridPlayIdRef.current !== myPlay) return;
+      setPlayingId(null);
+    } finally {
+      if (gridPlayIdRef.current === myPlay) setLoadingId(null);
     }
-    await playGenerated(card);
   }
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onError = () => {
-      if (loadingId) {
-        const card = cards.find((c) => c.key === loadingId);
-        if (card) playGenerated(card);
-        else {
-          setPlayingId(null);
-          setLoadingId(null);
-        }
-      }
-    };
-    audio.addEventListener("error", onError);
-    return () => audio.removeEventListener("error", onError);
-  }, [loadingId]);
 
   function openPresent(index: number) {
     if (cards.length === 0) return;
@@ -189,7 +148,8 @@ export default function ExamplesPageClient() {
 
   function closePresent() {
     setPresenting(false);
-    presentAudioRef.current?.pause();
+    presentHandleRef.current?.stop();
+    presentHandleRef.current = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     setPresentPlaying(false);
     if (document.fullscreenElement) {
@@ -204,82 +164,50 @@ export default function ExamplesPageClient() {
     setSlide(((next % total) + total) % total);
   }
 
-  function presentSpeak(narration: string) {
-    if (!("speechSynthesis" in window)) {
-      setPresentPlaying(false);
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(narration);
-    u.lang = "en-US";
-    u.rate = 0.95;
-    u.onend = () => {
-      if (autoNarrateRef.current && slideRef.current < cardsRef.current.length - 1) {
-        setSlide(slideRef.current + 1);
-      } else {
-        setPresentPlaying(false);
-      }
-    };
-    u.onerror = () => setPresentPlaying(false);
-    setPresentPlaying(true);
-    window.speechSynthesis.speak(u);
-  }
-
   async function playPresentAudio(index: number) {
     const card = cardsRef.current[index];
-    const audio = presentAudioRef.current;
-    if (!card || !audio) return;
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    audio.pause();
-    if (card.audio) {
-      try {
-        audio.src = card.audio;
-        await audio.play();
-        return;
-      } catch {
-      }
-    }
+    if (!card) return;
+    presentHandleRef.current?.stop();
+    const myPlay = ++presentPlayIdRef.current;
     try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: card.narration, language: "en" }),
+      const { handle } = await playMixedNarration({
+        narrationUrl: card.audio,
+        narrationText: card.narration,
+        musicUrl: card.music,
+        onEnded: () => {
+          setPresentPlaying(false);
+          if (autoNarrateRef.current && slideRef.current < cardsRef.current.length - 1) {
+            setSlide(slideRef.current + 1);
+          }
+        },
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.audio) throw new Error(data?.error || "TTS failed");
-      audio.src = data.audio as string;
-      await audio.play();
+      if (presentPlayIdRef.current !== myPlay) {
+        handle.stop();
+        return;
+      }
+      presentHandleRef.current = handle;
+      setPresentPlaying(true);
     } catch {
-      presentSpeak(card.narration);
+      if (presentPlayIdRef.current !== myPlay) return;
+      setPresentPlaying(false);
     }
   }
 
   function togglePresentAudio() {
-    const audio = presentAudioRef.current;
-    const card = cardsRef.current[slideRef.current];
-    if (!audio || !card) return;
     if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
       navigator.vibrate(20);
     }
-    if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-      setPresentPlaying(false);
-      setPresentStatus("Narration paused. Tap anywhere to play again.");
-      return;
-    }
-    if (!audio.paused) {
-      audio.pause();
+    const handle = presentHandleRef.current;
+    if (handle && presentPlaying) {
+      handle.stop();
+      presentHandleRef.current = null;
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       setPresentPlaying(false);
       setPresentStatus("Narration paused. Tap anywhere to play again.");
       return;
     }
     setPresentStatus("Playing narration.");
-    if (audio.src && audio.currentSrc) {
-      audio.play().catch(() => playPresentAudio(slideRef.current));
-    } else {
-      playPresentAudio(slideRef.current);
-    }
+    playPresentAudio(slideRef.current);
   }
 
   function handlePresentTap(e: ReactMouseEvent<HTMLDivElement>) {
@@ -292,25 +220,6 @@ export default function ExamplesPageClient() {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     presentBoxRef.current?.focus({ preventScroll: true });
-    const audio = new Audio();
-    presentAudioRef.current = audio;
-    const onPlay = () => setPresentPlaying(true);
-    const onPause = () => setPresentPlaying(false);
-    const onEnded = () => {
-      setPresentPlaying(false);
-      if (autoNarrateRef.current && slideRef.current < cardsRef.current.length - 1) {
-        setSlide(slideRef.current + 1);
-      }
-    };
-    const onError = () => {
-      const card = cardsRef.current[slideRef.current];
-      if (card && !card.audio) playPresentAudio(slideRef.current);
-      else if (card) presentSpeak(card.narration);
-    };
-    audio.addEventListener("play", onPlay);
-    audio.addEventListener("pause", onPause);
-    audio.addEventListener("ended", onEnded);
-    audio.addEventListener("error", onError);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closePresent();
       else if (e.key === "ArrowRight") goSlide(slideRef.current + 1);
@@ -323,15 +232,11 @@ export default function ExamplesPageClient() {
     window.addEventListener("keydown", onKey);
     presentBoxRef.current?.requestFullscreen?.().catch(() => {});
     return () => {
-      audio.pause();
-      audio.removeEventListener("play", onPlay);
-      audio.removeEventListener("pause", onPause);
-      audio.removeEventListener("ended", onEnded);
-      audio.removeEventListener("error", onError);
+      presentHandleRef.current?.stop();
+      presentHandleRef.current = null;
       window.removeEventListener("keydown", onKey);
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       document.body.style.overflow = prev;
-      presentAudioRef.current = null;
     };
   }, [presenting]);
 

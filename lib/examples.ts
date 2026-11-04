@@ -7,6 +7,7 @@ export interface ExampleEntry {
   image: string;
   audio: string;
   musicLabel?: string;
+  music: string | null;
 }
 
 export const EXAMPLES: ExampleEntry[] = [
@@ -19,6 +20,7 @@ export const EXAMPLES: ExampleEntry[] = [
     image: "/examples/diponegoro-submission.jpg",
     audio: "/examples/diponegoro-submission.mp3",
     musicLabel: "Solemn Historical",
+    music: "/bgm/solemn-historical.wav",
   },
   {
     id: "self-portrait-affandi",
@@ -29,6 +31,7 @@ export const EXAMPLES: ExampleEntry[] = [
     image: "/examples/self-portrait-affandi.jpg",
     audio: "/examples/self-portrait-affandi.mp3",
     musicLabel: "Warm Portrait",
+    music: "/bgm/warm-portrait.wav",
   },
   {
     id: "bull-hunt",
@@ -39,6 +42,7 @@ export const EXAMPLES: ExampleEntry[] = [
     image: "/examples/bull-hunt.jpg",
     audio: "/examples/bull-hunt.mp3",
     musicLabel: "Solemn Historical",
+    music: "/bgm/solemn-historical.wav",
   },
   {
     id: "perjuangan-kemerdekaan",
@@ -49,5 +53,6 @@ export const EXAMPLES: ExampleEntry[] = [
     image: "/examples/perjuangan-kemerdekaan.jpg",
     audio: "/examples/perjuangan-kemerdekaan.mp3",
     musicLabel: "Solemn Historical",
+    music: "/bgm/solemn-historical.wav",
   },
 ];

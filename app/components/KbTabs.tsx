@@ -113,7 +113,7 @@ export default function KbTabs({ entries }: { entries: KbEntry[] }) {
       <section className="text-center">
         <h1 className="font-display text-4xl font-semibold sm:text-5xl">
           Knowledge Base,<br />
-          <span className="italic text-primary">fill in its memory.</span>
+          <span className="italic text-primary">feed its memory.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base text-muted-foreground">
           {entries.length} entries registered. Browse them in the List tab, add new ones in the Add tab.
