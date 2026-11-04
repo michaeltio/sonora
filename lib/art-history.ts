@@ -7,8 +7,6 @@ export function saveHistoryEntry(e: HistoryEntry) {
   try {
     localStorage.setItem(KEY, JSON.stringify(entries));
   } catch {
-    // Kuota penuh: buang thumbnail entri lama (thumbnail = bagian terbesar),
-    // coba lagi; kalau masih gagal, simpan 10 terbaru tanpa thumbnail.
     try {
       const slim = entries.map((en, i) => (i < 10 ? en : { ...en, thumbnail: "" }));
       localStorage.setItem(KEY, JSON.stringify(slim));
@@ -16,7 +14,6 @@ export function saveHistoryEntry(e: HistoryEntry) {
       try {
         localStorage.setItem(KEY, JSON.stringify(entries.slice(0, 10).map((en) => ({ ...en, thumbnail: "" }))));
       } catch {
-        // storage tidak tersedia — abaikan, jangan crash UI
       }
     }
   }
@@ -46,8 +43,6 @@ export function prepareImage(file: File): Promise<string> {
   });
 }
 export function makeThumbnail(dataUrl: string): Promise<string> {
-  // Thumbnail kecil (maks 160px, JPEG 0.7) agar localStorage tidak penuh.
-  // Jangan pernah menyimpan gambar full-size ke history.
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve("");
     const img = new Image();

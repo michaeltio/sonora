@@ -5,10 +5,9 @@ import KbTabs from "@/app/components/KbTabs";
 
 export const metadata: Metadata = {
   title: "Sonora",
-  description: "Lihat isi knowledge base Sonora dan tambah entry baru lewat form atribut.",
+  description: "Browse the Sonora knowledge base and add new entries through the attribute form.",
 };
 
-// KB dibaca dari file setiap request (bisa berubah saat dev) — jangan prerender statis.
 export const instant = false;
 
 async function getEntries() {

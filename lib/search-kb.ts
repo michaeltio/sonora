@@ -1,9 +1,3 @@
-// searchKB — retriever sederhana untuk knowledge base Sonora.
-//
-// BUKAN fitur LLM/Muse: fungsi TypeScript biasa yang berjalan di server.
-// Input: vision JSON dari Muse. Output: entry KB + skor + verdict.
-// Tidak ada API call, tidak ada biaya, selesai dalam milidetik.
-
 import artworksDb from "@/data/artworks.json";
 
 export interface KBVisualCues {
@@ -50,8 +44,6 @@ const STOPWORDS = new Set([
   "yang", "dan", "dari", "di", "ke", "dengan", "untuk", "pada", "adalah",
 ]);
 
-// Indonesian → English aliases: safety net so matching still works
-// even if the vision model leaks Indonesian words despite the English-only prompt.
 const ID_ALIASES: Record<string, string> = {
   lukisan: "painting", patung: "statue", arca: "statue", candi: "temple",
   perwira: "officer", prajurit: "soldier", tentara: "soldier",
@@ -103,8 +95,6 @@ function stemEn(w: string): string {
   return w;
 }
 
-// English synonym expansion so vision-model wording variants still match
-// curated KB phrases (e.g. "mounted soldiers" vs "soldiers on horseback").
 const EN_SYNONYMS: Record<string, string> = {
   mounted: "mounted horseback",
   ridden: "ridden horseback ride",
@@ -194,8 +184,6 @@ function inferCategory(v: VisionForSearch): "painting" | "sculpture" | "textile"
   const hay = [...(v.objects || []), ...(v.symbolic_elements || []), v.composition || "", v.title || ""]
     .join(" ")
     .toLowerCase();
-  // Note: "temple"/"candi" alone is a place, not a medium — a painting OF a temple
-  // is still a painting. Sculpture needs object words (statue, relief, carving...).
   const sculpture = /(statue|sculpt|arca|relief|carv|stone figure|patung|ukir|bronze|effigy)/.test(hay);
   const textile = /(textile|fabric|batik|songket|ulos|ikat|tenun|weav|cloth|kain|motif|pattern|thread)/.test(hay);
   if (textile && !sculpture) return "textile";

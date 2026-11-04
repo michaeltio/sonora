@@ -8,7 +8,6 @@ const Schema = z.object({
   image: z.string().startsWith("data:image/").max(10_000_000),
 });
 
-/** Second Muse call (text-only, no image): rewrite the narration using verified KB facts. */
 async function narrateWithFacts(
   vision: any,
   entry: { title: string; artist: string; period?: string; origin?: string; summary: string }
@@ -65,12 +64,6 @@ export async function POST(request: NextRequest) {  try {
     if (!parsed.success) {
       return NextResponse.json({ ok: false, error: "Invalid image input or image too large." }, { status: 400 });
     }
-    // LLM dulu: hanya status "identified" (terverifikasi kuat) yang langsung dipercaya.
-    // Status "possible" artinya LLM sendiri belum yakin, jadi searchKB tetap jalan
-    // sebagai verifikasi/fallback. Begitu juga "unknown".
-
-    // Reuse the existing, provider-compatible Muse vision route. It supports
-    // both OpenAI chat-completions and Responses-style providers.
     const describeResponse = await fetch(new URL("/api/describe", request.url), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,8 +79,6 @@ export async function POST(request: NextRequest) {  try {
     const llmIdentity: string | undefined = vision?.identity_status;
     const llmIdentified = llmIdentity === "identified";
 
-    // ---- Retrieval: jalan kecuali LLM sudah "identified" dengan bukti kuat ----
-    // searchKB murni kode lokal (tanpa API call): vision JSON in, entry + skor out.
     let kb: { entry: any; score: number; verdict: "identified" | "possible" | "unknown" } = {
       entry: null,
       score: 0,
@@ -106,7 +97,6 @@ export async function POST(request: NextRequest) {  try {
       kb = { entry: found.entry, score: found.score, verdict: found.verdict };
     }
 
-    // ---- Narasi berfakta: hanya kalau fallback KB menemukan yang cocok ----
     let narration: string = data?.audioScript?.plain || data?.caption || "";
     let narrationSource: "muse" | "muse+kb" = "muse";
     if (!llmIdentified && kb.entry && (kb.verdict === "identified" || kb.verdict === "possible")) {
@@ -130,7 +120,6 @@ export async function POST(request: NextRequest) {  try {
       kind: data?.json?.period,
     });
 
-    // Kalau KB cocok kuat dan entry punya music_profile, pakai musik dari KB.
     let musicOut = {
       trackId: music.track.id,
       url: music.track.url,
@@ -148,7 +137,7 @@ export async function POST(request: NextRequest) {  try {
           trackId: kbTrack.id,
           url: kbTrack.url,
           label: kbTrack.label,
-          reason: `${music.reason} · Musik dipilih dari knowledge base (${kb.entry.title}).`,
+          reason: `${music.reason} · Music selected from the knowledge base (${kb.entry.title}).`,
         };
       }
     }

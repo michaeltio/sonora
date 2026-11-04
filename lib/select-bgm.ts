@@ -1,6 +1,3 @@
-// Pure functions (no browser APIs) so they can run in API routes and in the client.
-// Pipeline: vision/narration text -> atmosphere attributes -> cosine similarity -> best BGM track.
-
 import { BGM_DIMENSIONS, BGM_TRACKS, type BgmTrack } from "./bgm-tracks";
 
 export interface AtmosphereAttributes {
@@ -66,7 +63,6 @@ export function extractAtmosphere(input: {
 
   const vector = KEYWORDS.map(({ words }, i) => {
     const hits = countHits(hay, words);
-    // Base level + keyword hits, clamped to [0,1]. Mood field gets double weight.
     const moodHits = countHits(input.mood || "", words) * 2;
     return Math.min(1, 0.22 + (hits + moodHits) * 0.18 + (i === 0 || i === 2 ? 0.08 : 0));
   });
@@ -101,12 +97,9 @@ function cosine(a: number[], b: number[]): number {
 export function matchBgm(atmosphere: AtmosphereAttributes): BgmMatch {
   const scored = BGM_TRACKS.map((track) => {
     let score = cosine(atmosphere.vector, track.vector);
-    // Category affinity bonus.
     if (track.categories.includes(atmosphere.category as "painting")) score += 0.08;
-    // Cultural cue bonus (strong signal when present).
     const overlap = track.cultures.filter((c) => atmosphere.cultureCues.includes(c)).length;
     if (overlap > 0) score += 0.1 + 0.04 * overlap;
-    // Unknown identity falls back to neutral warm tracks.
     if (atmosphere.category === "unknown" && (track.id === "warm-reflective" || track.id === "abstract-textural")) score += 0.03;
     return { track, score: Math.round(score * 1000) / 1000 };
   }).sort((a, b) => b.score - a.score);
@@ -118,9 +111,9 @@ export function matchBgm(atmosphere: AtmosphereAttributes): BgmMatch {
     .map((x) => x.d)
     .join(", ");
   const reason =
-    `Suasana dominan: ${topDims}` +
-    (atmosphere.cultureCues.length ? `; isyarat budaya: ${atmosphere.cultureCues.join(", ")}` : "") +
-    (atmosphere.category !== "unknown" ? `; kategori: ${atmosphere.category}` : "");
+    `Dominant atmosphere: ${topDims}` +
+    (atmosphere.cultureCues.length ? `; cultural cues: ${atmosphere.cultureCues.join(", ")}` : "") +
+    (atmosphere.category !== "unknown" ? `; category: ${atmosphere.category}` : "");
 
   return {
     track: best.track,

@@ -13,12 +13,11 @@ const Schema = z.object({
   artist: z.string().default(""),
 });
 
-/** Test how well given attributes match the current KB (top 3). No file is written. */
 export async function POST(request: NextRequest) {
   try {
     const parsed = Schema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: "Input tidak valid", details: parsed.error.issues }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "Invalid input", details: parsed.error.issues }, { status: 400 });
     }
     const v = parsed.data;
     const result = searchKB({
@@ -30,7 +29,6 @@ export async function POST(request: NextRequest) {
       title: v.title,
       artist: v.artist,
     });
-    // Suggest music based on the matched entry, fallback to neutral.
     const musicId = result.entry?.music_profile || "warm-reflective";
     const musicLabel = BGM_TRACKS.find((t) => t.id === musicId)?.label || musicId;
     return NextResponse.json({
@@ -43,6 +41,6 @@ export async function POST(request: NextRequest) {
       suggestedMusicLabel: musicLabel,
     });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Request gagal." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Request failed." }, { status: 400 });
   }
 }

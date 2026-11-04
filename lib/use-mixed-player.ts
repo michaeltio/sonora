@@ -12,7 +12,6 @@ export interface MixedPlayer {
   ttsUrl: string | null;
   musicUrl: string | null;
   mixedUrl: string | null;
-  /** Where the narration voice comes from: server TTS, on-device browser voice, or none yet. */
   ttsSource: "server" | "browser" | null;
   ttsVolume: number;
   musicVolume: number;
@@ -50,10 +49,7 @@ export function useMixedPlayer(): MixedPlayer {
   const srcsRef = useRef<AudioBufferSourceNode[]>([]);
   const timersRef = useRef<number[]>([]);
   const mixedBufRef = useRef<AudioBuffer | null>(null);
-  // Fallback narration when the TTS server is unreachable: { text } spoken
-  // with the on-device English voice instead of a server-generated audio URL.
   const ttsFallbackRef = useRef<{ text: string; lang: string } | null>(null);
-  // Increments on every stop()/new playback so stale async continuations bail out.
   const runIdRef = useRef(0);
   const speakTimeoutRef = useRef<number | null>(null);
   const speakFinishRef = useRef<(() => void) | null>(null);
@@ -89,7 +85,6 @@ export function useMixedPlayer(): MixedPlayer {
       window.clearTimeout(speakTimeoutRef.current);
       speakTimeoutRef.current = null;
     }
-    // Resolve any pending on-device narration so awaiting callers don't hang.
     if (speakFinishRef.current) {
       const finish = speakFinishRef.current;
       speakFinishRef.current = null;
@@ -102,12 +97,10 @@ export function useMixedPlayer(): MixedPlayer {
     } catch {}
     for (const s of srcsRef.current) try { s.stop(); } catch {}
     srcsRef.current = [];
-    // also stop any <audio> fallback
     document.querySelectorAll("audio[data-mixed]").forEach((a) => { (a as HTMLAudioElement).pause(); });
     setState((s) => (s === "playing" ? "ready" : s));
   }, []);
 
-  /** Pick the best on-device English voice, if any. */
   function pickEnglishVoice(): SpeechSynthesisVoice | null {
     try {
       const voices = window.speechSynthesis.getVoices();
@@ -121,7 +114,6 @@ export function useMixedPlayer(): MixedPlayer {
     }
   }
 
-  /** Speak text with the on-device English voice. Resolves when done, on error, or on timeout. */
   function speakFallback(text: string): Promise<void> {
     return new Promise((resolve) => {
       let done = false;
@@ -147,7 +139,6 @@ export function useMixedPlayer(): MixedPlayer {
         u.pitch = 1;
         u.onend = finish;
         u.onerror = finish;
-        // Safety net: words-per-minute estimate + grace period, in case events never fire.
         const words = text.trim().split(/\s+/).filter(Boolean).length;
         speakTimeoutRef.current = window.setTimeout(finish, Math.max(8000, (words / 2.2) * 1000 + 6000));
         synth.speak(u);
@@ -164,9 +155,6 @@ export function useMixedPlayer(): MixedPlayer {
   useEffect(() => {
     return () => {
       stop();
-      // Close only once: close() on an already-closed/closing context
-      // returns a REJECTED promise (try/catch can't catch that — must .catch it).
-      // Without this guard, unmounting mid-playback throws "cannot close AudioContext".
       const ctx = ctxRef.current;
       ctxRef.current = null;
       if (ctx && ctx.state !== "closed") {
@@ -179,7 +167,6 @@ export function useMixedPlayer(): MixedPlayer {
         mixedUrlRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function generateTts(text: string, lang = "en"): Promise<string | null> {
@@ -188,7 +175,6 @@ export function useMixedPlayer(): MixedPlayer {
     ttsFallbackRef.current = null;
     setState("loading-tts");
 
-    // Server TTS failed/unreachable -> fall back to the on-device English voice.
     const useBrowserFallback = (): boolean => {
       try {
         if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
@@ -233,7 +219,6 @@ export function useMixedPlayer(): MixedPlayer {
     setError(null);
     setState("loading-music");
     try {
-      // Try server-side musicgen first
       const res = await fetch("/api/music", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -247,12 +232,9 @@ export function useMixedPlayer(): MixedPlayer {
         setState("ready");
         return data.audio as string;
       }
-      // Fallback: procedural synth locally
       const ctx = ensureCtx();
       const buf = synthesizeGamelan(ctx, durationSec, preset);
       const url = bufferToWavUrl(buf);
-      // store decoded buffer directly is not URL-playable for buildMix, but URL is playable; for mixing we re-synthesize or decode
-      // For now store the wav URL
       if (musicUrl && musicUrl.startsWith("blob:")) URL.revokeObjectURL(musicUrl);
       setMusicUrl(url);
       setMixedUrl((old) => { if (old) URL.revokeObjectURL(old); return null; });
@@ -260,7 +242,6 @@ export function useMixedPlayer(): MixedPlayer {
       setState("ready");
       return url;
     } catch (e: any) {
-      // absolute fallback: local synth
       try {
         const ctx = ensureCtx();
         const buf = synthesizeGamelan(ctx, durationSec, preset);
@@ -310,9 +291,6 @@ export function useMixedPlayer(): MixedPlayer {
     src.start(0);
   }
 
-  // Live mix: 1.6s music intro, narration starts ducked, 30s BGM loops,
-  // music fades out 1.5s after narration ends. Narration comes from the
-  // server TTS audio when available, otherwise the on-device English voice.
   async function playMixed() {
     const fallback = !ttsUrl ? ttsFallbackRef.current : null;
     if ((!ttsUrl && !fallback) || !musicUrl) { setError("Generate TTS and music first."); return; }
@@ -328,7 +306,6 @@ export function useMixedPlayer(): MixedPlayer {
       const fadeSec = 1.5;
       const ttsStart = t0 + introSec;
 
-      // --- music chain (looped) ---
       const musicSrc = ctx.createBufferSource();
       musicSrc.buffer = musicBuf;
       musicSrc.loop = true;
@@ -336,7 +313,6 @@ export function useMixedPlayer(): MixedPlayer {
       musicSrc.connect(musicGain);
       musicGain.connect(ctx.destination);
 
-      // intro: silence -> bed*1.6, then duck to bed when narration starts
       const bed = Math.max(0, Math.min(musicVolume, 0.6));
       musicGain.gain.setValueAtTime(0.0001, t0);
       musicGain.gain.linearRampToValueAtTime(Math.max(0.0002, bed * 1.6), t0 + introSec * 0.9);
@@ -363,7 +339,6 @@ export function useMixedPlayer(): MixedPlayer {
       };
 
       if (ttsBuf) {
-        // --- narration chain (server TTS audio) ---
         const ttsSrc = ctx.createBufferSource();
         ttsSrc.buffer = ttsBuf;
         const ttsGain = ctx.createGain();
@@ -374,7 +349,6 @@ export function useMixedPlayer(): MixedPlayer {
         srcsRef.current.push(ttsSrc);
         ttsSrc.start(ttsStart);
       } else if (fallback) {
-        // --- narration chain (on-device English voice), starts as the music ducks ---
         const speakTimer = window.setTimeout(() => {
           if (runIdRef.current !== myRun) return;
           void speakFallback(fallback.text).then(() => finishPlayback());
@@ -402,7 +376,6 @@ export function useMixedPlayer(): MixedPlayer {
     try {
       const ctx = ensureCtx();
       const buf = await decodeAny(ttsUrl, ctx);
-      // apply ttsVolume
       for (let ch = 0; ch < buf.numberOfChannels; ch++) {
         const d = buf.getChannelData(ch);
         for (let i = 0; i < d.length; i++) d[i] *= ttsVolume;
@@ -418,7 +391,7 @@ export function useMixedPlayer(): MixedPlayer {
       const buf = await decodeAny(musicUrl, ctx);
       for (let ch = 0; ch < buf.numberOfChannels; ch++) {
         const d = buf.getChannelData(ch);
-        for (let i = 0; i < d.length; i++) d[i] *= musicVolume * 2.5; // music preview louder
+        for (let i = 0; i < d.length; i++) d[i] *= musicVolume * 2.5;
       }
       await playBuffer(buf);
     } catch (e: any) { setError(e.message ?? String(e)); setState("ready"); }

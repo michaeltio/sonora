@@ -1,7 +1,3 @@
-// BGM catalog: 30s loops in public/bgm. Each track has a mood feature vector
-// plus category / cultural affinity used for similarity matching.
-// Vector dims: [calm, solemn, warm, tense, sacred, earthy, vibrant, contemporary]
-
 export type BgmTrackId =
   | "warm-reflective"
   | "solemn-historical"
@@ -44,7 +40,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.8, 0.4, 0.9, 0.1, 0.3, 0.4, 0.2, 0.5],
     categories: ["painting", "sculpture", "textile"],
     cultures: ["general", "contemporary"],
-    description: "Default hangat dan tenang untuk karya yang identitasnya tidak pasti.",
+    description: "A warm, calm default for works whose identity is uncertain.",
   },
   {
     id: "solemn-historical",
@@ -54,7 +50,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.5, 0.95, 0.5, 0.6, 0.4, 0.5, 0.2, 0.2],
     categories: ["painting", "sculpture"],
     cultures: ["java", "general"],
-    description: "Khidmat dan tegang untuk lukisan sejarah, kolonial, dan memorial.",
+    description: "Solemn and tense for historical, colonial, and memorial paintings.",
   },
   {
     id: "warm-portrait",
@@ -64,7 +60,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.7, 0.3, 0.95, 0.15, 0.2, 0.3, 0.4, 0.4],
     categories: ["painting"],
     cultures: ["general"],
-    description: "Intim dan personal untuk potret dan wajah manusia.",
+    description: "Intimate and personal for portraits and human faces.",
   },
   {
     id: "abstract-textural",
@@ -74,7 +70,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.5, 0.3, 0.3, 0.4, 0.2, 0.2, 0.4, 0.95],
     categories: ["painting", "sculpture"],
     cultures: ["contemporary", "general"],
-    description: "Tekstural dan modern untuk karya abstrak dan kontemporer.",
+    description: "Textural and modern for abstract and contemporary works.",
   },
   {
     id: "spacious-sculpture",
@@ -84,7 +80,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.7, 0.7, 0.4, 0.2, 0.6, 0.6, 0.2, 0.3],
     categories: ["sculpture"],
     cultures: ["java", "general"],
-    description: "Luas dan monumental untuk arca batu, relief, dan patung.",
+    description: "Spacious and monumental for stone statues, reliefs, and sculptures.",
   },
   {
     id: "textile-pattern",
@@ -94,7 +90,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.6, 0.2, 0.7, 0.1, 0.2, 0.7, 0.5, 0.4],
     categories: ["textile"],
     cultures: ["general", "sumatra", "java"],
-    description: "Berpola lembut untuk batik, tenun, songket, dan ulos.",
+    description: "Softly patterned for batik, tenun, songket, and ulos.",
   },
   {
     id: "javanese-bronze",
@@ -104,7 +100,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.6, 0.8, 0.6, 0.3, 0.8, 0.5, 0.4, 0.2],
     categories: ["painting", "sculpture"],
     cultures: ["java"],
-    description: "Resonansi perunggu Jawa yang halus untuk konteks Jawa.",
+    description: "Soft Javanese bronze resonance for Javanese contexts.",
   },
   {
     id: "sundanese-bamboo",
@@ -114,7 +110,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.8, 0.3, 0.7, 0.1, 0.3, 0.6, 0.5, 0.3],
     categories: ["painting", "textile"],
     cultures: ["sunda"],
-    description: "Bambu dan petikan lembut untuk suasana Sunda yang ringan.",
+    description: "Bamboo and gentle plucks for a light Sundanese atmosphere.",
   },
   {
     id: "eastern-wooden",
@@ -124,6 +120,6 @@ export const BGM_TRACKS: BgmTrack[] = [
     vector: [0.5, 0.4, 0.5, 0.2, 0.4, 0.95, 0.4, 0.3],
     categories: ["sculpture", "textile"],
     cultures: ["eastern", "papua", "maluku", "nusa-tenggara"],
-    description: "Kayu dan tanah untuk patung kayu dan kain timur Indonesia.",
+    description: "Wood and earth for wooden sculptures and eastern Indonesian textiles.",
   },
 ];

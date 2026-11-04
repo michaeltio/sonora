@@ -4,19 +4,11 @@ export interface ExampleEntry {
   kind: string;
   origin: string;
   narration: string;
-  /** Static image served from /public, e.g. "/examples/diponegoro.jpg" */
   image: string;
-  /** Pre-generated narration audio served from /public, e.g. "/examples/diponegoro.mp3" */
   audio: string;
   musicLabel?: string;
 }
 
-/**
- * Static showcase entries (bundled files, zero API requests).
- *
- * Bundled with the app so /examples is populated for every visitor
- * (localStorage user examples remain on-device extras).
- */
 export const EXAMPLES: ExampleEntry[] = [
   {
     id: "diponegoro-submission",

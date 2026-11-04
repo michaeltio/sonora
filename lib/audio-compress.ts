@@ -2,11 +2,6 @@
 
 import { Mp3Encoder } from "@breezystack/lamejs";
 
-// Compress narration audio so it fits localStorage (~5MB shared quota).
-// Strategy: mono mixdown -> resample to 22050 Hz -> MP3 (mono).
-// ~2 minutes of narration at 48 kbps is roughly 700 KB as base64 —
-// far smaller than WAV, with voice quality far better than 8-bit PCM.
-
 function arrayBufferToBase64(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   const chunk = 0x8000;
@@ -58,15 +53,10 @@ function encodeMp3Mono(samples16: Int16Array, sampleRate: number, kbps: number):
   return out;
 }
 
-/**
- * Returns a smaller data:audio/mp3 URL, or null if it can't fit maxChars.
- * Tries 48 kbps first, then falls back to 24 kbps.
- */
 export async function compressAudioForStorage(dataUrl: string, maxChars = 1_400_000): Promise<string | null> {
   if (!dataUrl) return null;
   if (dataUrl.startsWith("data:audio/mp3") && dataUrl.length <= maxChars) return dataUrl;
   if (dataUrl.length <= maxChars && dataUrl.startsWith("data:audio/wav")) {
-    // Even small WAVs are worth re-encoding: MP3 keeps quality while staying tiny.
   }
   try {
     const res = await fetch(dataUrl);

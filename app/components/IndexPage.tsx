@@ -47,7 +47,6 @@ export default function IndexPage() {
     if (!image) return;
     setStage("analyzing"); setError(null); mix.stop();
     try {
-      // Full AI: selalu lewat Muse vision + KB + narasi berfakta. Tanpa mock.
       const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image }) });
       const response = await res.json().catch(() => ({ ok: false, error: "Invalid AI response." }));
       if (!res.ok) response.ok = false;
@@ -56,11 +55,10 @@ export default function IndexPage() {
       setResult(r); setStage("done");
       const thumbnail = await makeThumbnail(image).catch(() => "");
       saveHistoryEntry({ id: crypto.randomUUID(), title: r.title || "Unknown", kind: r.kind || "Artwork", origin: r.origin || "Unknown", narration: r.narration || "", thumbnail, createdAt: Date.now() });
-      // Auto-pair BGM dari atribut suasana + siapkan TTS agar Play sekali klik langsung jalan.
       try {
         if (r.music?.url) mix.loadBgm(r.music.url);
         if (r.narration) await mix.generateTts(r.narration, "en");
-      } catch { /* TTS/BGM opsional, Play tetap bisa dicoba manual */ }
+      } catch {}
     } catch (e) { setError(e instanceof Error ? e.message : "Generation failed"); setStage("ready"); }
   }
 
@@ -69,8 +67,6 @@ export default function IndexPage() {
     setSavingExample(true);
     try {
       const thumbnail = image ? await makeThumbnail(image).catch(() => "") : "";
-      // Kompres audio dulu (mono, sample rate rendah) supaya muat di localStorage.
-      // Kualitas turun tidak masalah; kalau tetap tidak muat -> null (Play generate on-demand).
       const ttsAudio = mix.ttsUrl ? await compressAudioForStorage(mix.ttsUrl).catch(() => null) : null;
       saveUserExample({
         id: crypto.randomUUID(),
@@ -114,7 +110,6 @@ export default function IndexPage() {
           <div className="space-y-4 p-5 sm:p-6">
             <div className="rounded-2xl bg-secondary/60 p-5"><p className="whitespace-pre-line font-display text-lg leading-relaxed">{result.narration}</p></div>
 
-            {/* === PLAY NARASI + BGM === */}
             <button
               onClick={() => isPlaying ? mix.stop() : mix.playMixed()}
               disabled={!canMix || isBusy}

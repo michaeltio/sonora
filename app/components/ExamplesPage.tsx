@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, Loader2, Pause, Play, Presentation, X } from "lucide-react";
 import { EXAMPLES } from "@/lib/examples";
 
@@ -15,7 +15,6 @@ type Card = {
   musicLabel?: string;
 };
 
-/** First few words of the narration for the card face. Full text lives in the drawer. */
 function excerpt(text: string, words = 16): string {
   const parts = text.trim().split(/\s+/).filter(Boolean);
   if (parts.length <= words) return text.trim();
@@ -29,25 +28,21 @@ export default function ExamplesPageClient() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [drawerCard, setDrawerCard] = useState<Card | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // "generated" = audio dibuat on-demand via /api/tts saat Play ditekan.
-  // "browser" = server TTS mati, pakai suara on-device.
   const [audioNote, setAudioNote] = useState<Record<string, "generated" | "browser">>({});
 
-  // ---- Presentation mode (PowerPoint-like fullscreen slideshow) ----
   const [presenting, setPresenting] = useState(false);
   const [slide, setSlide] = useState(0);
   const [autoNarrate, setAutoNarrate] = useState(true);
   const [presentPlaying, setPresentPlaying] = useState(false);
   const [showCaption, setShowCaption] = useState(true);
+  const [presentStatus, setPresentStatus] = useState("");
   const presentBoxRef = useRef<HTMLDivElement | null>(null);
   const presentAudioRef = useRef<HTMLAudioElement | null>(null);
   const touchXRef = useRef<number | null>(null);
-  // Refs mirror state for the audio "ended" handler (cards is rebuilt every render).
   const cardsRef = useRef<Card[]>([]);
   const slideRef = useRef(0);
   const autoNarrateRef = useRef(true);
 
-  // Static showcase only — bundled files in public/examples, same for every visitor.
   const cards: Card[] = EXAMPLES.map((e) => ({
       key: `static-${e.id}`,
       title: e.title,
@@ -76,7 +71,6 @@ export default function ExamplesPageClient() {
     };
   }, []);
 
-  // Lock body scroll + Escape to close while the drawer is open.
   useEffect(() => {
     if (!drawerOpen) return;
     const prev = document.body.style.overflow;
@@ -89,13 +83,11 @@ export default function ExamplesPageClient() {
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerOpen]);
 
   function openDrawer(card: Card) {
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     setDrawerCard(card);
-    // Next frame so the slide-in transition actually animates.
     requestAnimationFrame(() => requestAnimationFrame(() => setDrawerOpen(true)));
   }
 
@@ -126,8 +118,6 @@ export default function ExamplesPageClient() {
   }
 
   async function playGenerated(card: Card) {
-    // Audio tidak tersimpan (file terlalu besar untuk localStorage) —
-    // buat saat diputar via /api/tts. Butuh server TTS menyala.
     setLoadingId(card.key);
     try {
       const res = await fetch("/api/tts", {
@@ -156,7 +146,6 @@ export default function ExamplesPageClient() {
       return;
     }
     stopAll();
-    // 1) Audio siap (file statis / klip kecil tersimpan) → langsung putar, tanpa request.
     const audio = audioRef.current;
     if (card.audio && audio) {
       setLoadingId(card.key);
@@ -167,10 +156,8 @@ export default function ExamplesPageClient() {
         setLoadingId(null);
         return;
       } catch {
-        // file rusak/hilang → lanjut ke generate on-demand di bawah
       }
     }
-    // 2) Tidak ada audio tersimpan → generate on-demand, fallback suara browser.
     await playGenerated(card);
   }
 
@@ -189,10 +176,8 @@ export default function ExamplesPageClient() {
     };
     audio.addEventListener("error", onError);
     return () => audio.removeEventListener("error", onError);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingId]);
 
-  // ---------- Presentation mode ----------
   function openPresent(index: number) {
     if (cards.length === 0) return;
     stopAll();
@@ -219,7 +204,6 @@ export default function ExamplesPageClient() {
     setSlide(((next % total) + total) % total);
   }
 
-  /** Browser-voice fallback inside presentation; advances when auto-narasi is on. */
   function presentSpeak(narration: string) {
     if (!("speechSynthesis" in window)) {
       setPresentPlaying(false);
@@ -253,7 +237,6 @@ export default function ExamplesPageClient() {
         await audio.play();
         return;
       } catch {
-        // fall through to on-demand TTS below
       }
     }
     try {
@@ -275,12 +258,23 @@ export default function ExamplesPageClient() {
     const audio = presentAudioRef.current;
     const card = cardsRef.current[slideRef.current];
     if (!audio || !card) return;
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(20);
+    }
+    if ("speechSynthesis" in window && window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      setPresentPlaying(false);
+      setPresentStatus("Narration paused. Tap anywhere to play again.");
+      return;
+    }
     if (!audio.paused) {
       audio.pause();
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       setPresentPlaying(false);
+      setPresentStatus("Narration paused. Tap anywhere to play again.");
       return;
     }
+    setPresentStatus("Playing narration.");
     if (audio.src && audio.currentSrc) {
       audio.play().catch(() => playPresentAudio(slideRef.current));
     } else {
@@ -288,11 +282,16 @@ export default function ExamplesPageClient() {
     }
   }
 
-  // Setup/teardown presentation: body lock, keyboard, fullscreen, dedicated audio.
+  function handlePresentTap(e: ReactMouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("button, a, [data-caption]")) return;
+    togglePresentAudio();
+  }
+
   useEffect(() => {
     if (!presenting) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    presentBoxRef.current?.focus({ preventScroll: true });
     const audio = new Audio();
     presentAudioRef.current = audio;
     const onPlay = () => setPresentPlaying(true);
@@ -334,15 +333,12 @@ export default function ExamplesPageClient() {
       document.body.style.overflow = prev;
       presentAudioRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presenting]);
 
-  // Auto-narasi: play narration every time the slide changes (or toggled on).
   useEffect(() => {
     if (!presenting || !autoNarrate) return;
     if (slide >= cardsRef.current.length) return;
     playPresentAudio(slide);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presenting, slide, autoNarrate]);
 
   function renderPlayButton(card: Card, big = false) {
@@ -410,7 +406,6 @@ export default function ExamplesPageClient() {
               }}
               className="flex h-full cursor-pointer flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              {/* Fixed 4:3 stage — artwork keeps its own aspect ratio via object-contain. */}
               <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-[#EADCC8]">
                 {card.image ? (
                   <img src={card.image} alt={card.title} className="block h-full w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
@@ -440,7 +435,6 @@ export default function ExamplesPageClient() {
         </section>
       )}
 
-      {/* ---- Right slide-in drawer ---- */}
       {drawerCard && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Details of ${drawerCard.title}`}>
           <div
@@ -487,11 +481,12 @@ export default function ExamplesPageClient() {
         </div>
       )}
 
-      {/* ---- Presentation mode (PowerPoint-like) ---- */}
       {presenting && slideCard && (
         <div
           ref={presentBoxRef}
-          className="fixed inset-0 z-[60] flex flex-col bg-[#1F140E] text-white"
+          tabIndex={-1}
+          onClick={handlePresentTap}
+          className="fixed inset-0 z-[60] flex flex-col bg-[#1F140E] text-white outline-none"
           role="dialog"
           aria-modal="true"
           aria-label={`Presenting ${slideCard.title}`}
@@ -504,7 +499,14 @@ export default function ExamplesPageClient() {
             else if (dx > 60) goSlide(slideRef.current - 1);
           }}
         >
-          {/* Top bar */}
+          <p aria-live="polite" className="sr-only">
+            Slide {safeSlide + 1} of {cards.length}: {slideCard.title}
+          </p>
+          <p className="sr-only">
+            Tap anywhere on the screen to play or pause the narration.
+            Swipe left or right to change slides.
+          </p>
+          <p aria-live="polite" className="sr-only">{presentStatus}</p>
           <div className="flex shrink-0 items-center gap-3 px-4 py-3 sm:px-6">
             <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold tabular-nums">
               {safeSlide + 1} / {cards.length}
@@ -516,19 +518,19 @@ export default function ExamplesPageClient() {
               type="button"
               onClick={() => setAutoNarrate((v) => !v)}
               aria-pressed={autoNarrate}
-              title="Putar narasi otomatis tiap slide"
+              title="Auto-play narration on every slide"
               className={`hidden rounded-full px-3 py-1.5 text-xs font-bold transition sm:block ${autoNarrate ? "bg-white text-black" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
             >
-              Auto-narasi {autoNarrate ? "ON" : "OFF"}
+              Auto-narrate {autoNarrate ? "ON" : "OFF"}
             </button>
             <button
               type="button"
               onClick={() => setShowCaption((v) => !v)}
               aria-pressed={showCaption}
-              title="Tampilkan/sembunyikan teks narasi"
+              title="Show/hide narration text"
               className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${showCaption ? "bg-white text-black" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
             >
-              Teks {showCaption ? "ON" : "OFF"}
+              Text {showCaption ? "ON" : "OFF"}
             </button>
             <button
               type="button"
@@ -540,7 +542,6 @@ export default function ExamplesPageClient() {
             </button>
           </div>
 
-          {/* Progress */}
           <div className="h-1 shrink-0 bg-white/10">
             <div
               className="h-full bg-white transition-all duration-300"
@@ -548,7 +549,6 @@ export default function ExamplesPageClient() {
             />
           </div>
 
-          {/* Slide body — full-bleed artwork, caption floats on top */}
           <div className="relative min-h-0 flex-1 bg-[#1F140E]">
             {slideCard.image ? (
               <img
@@ -561,7 +561,6 @@ export default function ExamplesPageClient() {
             ) : (
               <span className="absolute inset-0 flex items-center justify-center text-sm text-white/50">No image</span>
             )}
-            {/* Prev / next zones (desktop) */}
             <button
               type="button"
               onClick={() => goSlide(safeSlide - 1)}
@@ -579,7 +578,7 @@ export default function ExamplesPageClient() {
               <ChevronRight className="size-5" />
             </button>
             {showCaption ? (
-              <div className="absolute inset-x-0 bottom-0 z-10 max-h-[46%] overflow-y-auto bg-gradient-to-t from-[#1F140E] via-[#1F140E]/85 to-transparent px-5 pb-4 pt-12 sm:px-10 sm:pb-5">
+              <div data-caption className="absolute inset-x-0 bottom-0 z-10 max-h-[46%] overflow-y-auto bg-gradient-to-t from-[#1F140E] via-[#1F140E]/85 to-transparent px-5 pb-4 pt-12 sm:px-10 sm:pb-5">
                 <div className="mx-auto max-w-4xl">
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-white/50">
@@ -611,36 +610,40 @@ export default function ExamplesPageClient() {
                 onClick={() => setShowCaption(true)}
                 className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white/80 backdrop-blur transition hover:bg-white/25"
               >
-                <ChevronUp className="size-4" />Tampilkan teks
+                <ChevronUp className="size-4" />Show text
               </button>
             )}
           </div>
 
-          {/* Bottom controls */}
-          <div className="flex shrink-0 items-center justify-center gap-3 px-4 py-4 sm:gap-4">
+          <div className="flex shrink-0 items-center justify-center gap-4 px-4 py-4 sm:gap-6">
             <button
               type="button"
               onClick={() => goSlide(safeSlide - 1)}
               aria-label="Previous slide"
-              className="flex size-12 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/25 active:scale-95"
+              className="flex size-14 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/25 active:scale-95 sm:size-16"
             >
-              <ChevronLeft className="size-5" />
+              <ChevronLeft className="size-6 sm:size-7" />
             </button>
-            <button
-              type="button"
-              onClick={togglePresentAudio}
-              aria-label={presentPlaying ? "Pause narration" : "Play narration"}
-              className="flex size-14 items-center justify-center rounded-full bg-white text-black shadow-lg transition hover:bg-white/85 active:scale-95"
-            >
-              {presentPlaying ? <Pause className="size-6" /> : <Play className="size-6" />}
-            </button>
+            <div className="flex flex-col items-center gap-1.5">
+              <button
+                type="button"
+                onClick={togglePresentAudio}
+                aria-label={presentPlaying ? "Pause narration" : "Play narration"}
+                className="flex size-20 items-center justify-center rounded-full bg-white text-black shadow-xl ring-4 ring-white/25 transition hover:bg-white/85 active:scale-95 sm:size-24"
+              >
+                {presentPlaying ? <Pause className="size-9 sm:size-10" /> : <Play className="size-9 sm:size-10" />}
+              </button>
+              <span className="text-xs font-bold uppercase tracking-widest text-white/70" aria-hidden="true">
+                {presentPlaying ? "Pause" : "Play"}
+              </span>
+            </div>
             <button
               type="button"
               onClick={() => goSlide(safeSlide + 1)}
               aria-label="Next slide"
-              className="flex size-12 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/25 active:scale-95"
+              className="flex size-14 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/25 active:scale-95 sm:size-16"
             >
-              <ChevronRight className="size-5" />
+              <ChevronRight className="size-6 sm:size-7" />
             </button>
           </div>
           <div className="flex shrink-0 items-center justify-center gap-2 pb-4">
@@ -654,8 +657,8 @@ export default function ExamplesPageClient() {
               />
             ))}
           </div>
-          <p className="hidden shrink-0 pb-3 text-center text-[11px] text-white/40 sm:block">
-            ← → pindah slide · Spasi putar/jeda · ESC keluar
+          <p className="shrink-0 px-4 pb-3 text-center text-[11px] text-white/40">
+            Tap the screen to play/pause · ← → / swipe to change slides · ESC to exit
           </p>
         </div>
       )}

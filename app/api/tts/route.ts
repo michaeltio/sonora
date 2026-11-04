@@ -4,7 +4,6 @@ import { z } from "zod";
 const RequestSchema = z.object({
   text: z.string().min(1, "text is required").max(2000, "text too long (max 2000)"),
   language: z.string().optional().default("en"),
-  // optional speaker reference as data URL for fairy-tale voice cloning later
   speaker_wav: z.string().optional(),
 });
 
@@ -26,9 +25,6 @@ export async function POST(req: NextRequest) {
 
   const { text, language } = parsed.data;
 
-  // 1) Custom XTTS server (Colab tunnel, raw WAV response).
-  //    Set XTTS_URL to the /generate-audio/ endpoint and XTTS_SPEAKER_WAV
-  //    to a reference file path that exists on that server.
   const xttsUrl = process.env.XTTS_URL;
   if (xttsUrl) {
     try {
@@ -67,8 +63,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2) Persistent hosted TTS (/speak endpoint). Set TTS_URL to the endpoint.
-  //    Optional shared secret via TTS_KEY (sent as x-sonora-key).
   const ttsUrl = process.env.TTS_URL;
   if (ttsUrl) {
     try {

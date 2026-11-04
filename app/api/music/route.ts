@@ -14,8 +14,6 @@ export async function POST(req: NextRequest) {
   }
   const { prompt, duration } = parsed.data;
 
-  // Music is synthesized locally in the browser (Web Audio gamelan synth).
-  // No external music API is used — the frontend generates from these presets.
   return NextResponse.json({
     source: "procedural",
     procedural: true,
